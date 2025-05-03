@@ -7,6 +7,8 @@ import AddResource from './AddResource';
 
 const DashboardResources = () => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [resourceToEdit, setResourceToEdit] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -23,14 +25,19 @@ const DashboardResources = () => {
   };
 
   // Define fetchResources with useCallback to prevent it from causing infinite re-renders
-  const fetchResources = useCallback(async () => {
+  const fetchResources = useCallback(async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
       
       try {
+        // Add a cache-busting parameter when force refreshing
+        const timestamp = forceRefresh ? `?t=${new Date().getTime()}` : '';
+        console.log('Fetching resources from server' + (forceRefresh ? ' (forced refresh)' : ''));
+        
         // API endpoint with proper auth header
-        const response = await axios.get('/api/resources', getAuthHeader());
+        const response = await axios.get(`/api/resources${timestamp}`, getAuthHeader());
+        console.log('Resources fetched successfully:', response.data);
         setResources(response.data);
         setLoading(false);
       } catch (apiError) {
@@ -178,7 +185,15 @@ const DashboardResources = () => {
   };
 
   const handleResourceAdded = (newResource) => {
-    setResources(prev => [...prev, newResource]);
+    console.log('Resource added/updated:', newResource);
+    
+    // Instead of manually updating the state, force a fresh fetch from the server
+    // This ensures we always have the latest data from the database
+    fetchResources(true); // true = force refresh with cache busting
+    
+    // Reset editing state
+    setIsEditing(false);
+    setResourceToEdit(null);
   };
 
   const getTypeIcon = (type) => {
@@ -256,7 +271,19 @@ const DashboardResources = () => {
   };
 
   const handleEdit = (id) => {
-    navigate(`/resources/edit/${id}`);
+    // Find the resource to edit
+    const resourceToEdit = resources.find(resource => 
+      (resource.id === id || resource._id === id)
+    );
+    
+    if (resourceToEdit) {
+      setResourceToEdit(resourceToEdit);
+      setIsEditing(true);
+      setShowAddModal(true);
+    } else {
+      console.error('Resource not found for editing:', id);
+      setError('Resource not found for editing');
+    }
   };
 
   return (
@@ -329,9 +356,15 @@ const DashboardResources = () => {
       )}
 
       {showAddModal && (
-        <AddResource 
-          onClose={() => setShowAddModal(false)}
+        <AddResource
+          onClose={() => {
+            setShowAddModal(false);
+            setIsEditing(false);
+            setResourceToEdit(null);
+          }}
           onResourceAdded={handleResourceAdded}
+          resourceToEdit={resourceToEdit}
+          isEditing={isEditing}
         />
       )}
     </DashboardContainer>

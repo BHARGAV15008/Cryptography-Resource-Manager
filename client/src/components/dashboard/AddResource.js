@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { FaUpload, FaTimes, FaBook, FaVideo, FaFile, FaFilePdf, FaFilePowerpoint } from 'react-icons/fa';
 import axios from 'axios';
 
-const AddResource = ({ onClose, onResourceAdded }) => {
+const AddResource = ({ onClose, onResourceAdded, resourceToEdit = null, isEditing = false }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -14,7 +14,29 @@ const AddResource = ({ onClose, onResourceAdded }) => {
     tags: [],
   });
 
+  // Load resource data if editing
+  useEffect(() => {
+    if (isEditing && resourceToEdit) {
+      setFormData({
+        title: resourceToEdit.title || '',
+        description: resourceToEdit.description || '',
+        type: resourceToEdit.type || 'video',
+        content: resourceToEdit.content || '',
+        url: resourceToEdit.url || '',
+        author: resourceToEdit.creator_name || resourceToEdit.author || '',
+        tags: resourceToEdit.tags || [],
+      });
+
+      if (resourceToEdit.file_path) {
+        // If there's an existing file, show the filename
+        const filename = resourceToEdit.file_path.split('/').pop();
+        setFileDisplayName(filename);
+      }
+    }
+  }, [isEditing, resourceToEdit]);
+
   const [selectedFile, setSelectedFile] = useState(null);
+  const [fileDisplayName, setFileDisplayName] = useState('');
   const [currentTag, setCurrentTag] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -80,13 +102,13 @@ const AddResource = ({ onClose, onResourceAdded }) => {
         const healthCheck = await axios.get('/api/health');
         if (healthCheck.data.status === 'ok') {
           console.log('Server is available, proceeding with resource creation');
-          
+
           // Try to upload file if selected
           if (selectedFile) {
             try {
               const fileData = new FormData();
               fileData.append('file', selectedFile);
-              
+
               console.log('Attempting to upload file...');
               const uploadResponse = await axios.post('/api/resources/upload', fileData, {
                 ...getAuthHeader(),
@@ -95,7 +117,7 @@ const AddResource = ({ onClose, onResourceAdded }) => {
                   'Content-Type': 'multipart/form-data'
                 }
               });
-              
+
               fileUrl = uploadResponse.data.url;
               uploadSuccess = true;
               console.log('File uploaded successfully:', fileUrl);
@@ -106,18 +128,43 @@ const AddResource = ({ onClose, onResourceAdded }) => {
               console.log('Using local file URL as fallback:', fileUrl);
             }
           }
-          
-          // Now try to create the resource
+
+          // Now try to create or update the resource
           try {
             const resourceData = {
               ...formData,
               url: fileUrl,
               file_upload_status: uploadSuccess ? 'success' : 'failed'
             };
+
+            let response;
+            let updatedResource;
             
-            console.log('Sending resource data to server:', resourceData);
-            const response = await axios.post('/api/resources', resourceData, getAuthHeader());
-            onResourceAdded(response.data);
+            if (isEditing && resourceToEdit) {
+              console.log('Updating resource:', resourceToEdit.id, resourceData);
+              response = await axios.put(`/api/resources/${resourceToEdit.id}`, resourceData, getAuthHeader());
+              console.log('Resource updated successfully:', response.data);
+              
+              // Use the returned resource data if available, otherwise create a merged object
+              if (response.data.resource) {
+                updatedResource = response.data.resource;
+              } else {
+                // If server didn't return the updated resource, merge the local data
+                updatedResource = {
+                  ...resourceToEdit,
+                  ...resourceData,
+                  id: resourceToEdit.id || resourceToEdit._id,
+                  updated_at: new Date().toISOString()
+                };
+              }
+            } else {
+              console.log('Creating new resource:', resourceData);
+              response = await axios.post('/api/resources', resourceData, getAuthHeader());
+              console.log('Resource created successfully:', response.data);
+              updatedResource = response.data;
+            }
+            
+            onResourceAdded(updatedResource);
             onClose();
           } catch (resourceError) {
             console.error('Failed to create resource on server:', resourceError);
@@ -133,7 +180,7 @@ const AddResource = ({ onClose, onResourceAdded }) => {
       }
     } catch (err) {
       console.error('Error in resource creation process:', err);
-      
+
       let errorMessage = 'Failed to create resource';
       if (err.response) {
         errorMessage += `: ${err.response.data?.message || 'Unknown error'}`;
@@ -142,7 +189,7 @@ const AddResource = ({ onClose, onResourceAdded }) => {
       } else {
         errorMessage += `: ${err.message}`;
       }
-      
+
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);
@@ -161,7 +208,7 @@ const AddResource = ({ onClose, onResourceAdded }) => {
       createdAt: new Date().toISOString(),
       created_at: new Date().toISOString()
     };
-    
+
     console.log("Adding resource (mocked):", mockResource);
     onResourceAdded(mockResource);
     onClose();
@@ -181,7 +228,7 @@ const AddResource = ({ onClose, onResourceAdded }) => {
     <Modal>
       <ModalContent>
         <ModalHeader>
-          <h2>Add New Resource</h2>
+          <h2>{isEditing ? 'Edit Resource' : 'Add New Resource'}</h2>
           <CloseButton onClick={onClose}>
             <FaTimes />
           </CloseButton>
@@ -329,7 +376,7 @@ const AddResource = ({ onClose, onResourceAdded }) => {
               Cancel
             </CancelButton>
             <SubmitButton type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating...' : 'Create Resource'}
+              {isSubmitting ? 'Submitting...' : isEditing ? 'Update Resource' : 'Add Resource'}
             </SubmitButton>
           </ButtonGroup>
         </Form>

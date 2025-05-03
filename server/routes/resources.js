@@ -118,6 +118,31 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   }
 });
 
+// Test endpoint to verify database operations
+router.get('/test-db/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('Testing database operations for resource ID:', id);
+    
+    // First, check if the resource exists
+    const checkResource = await db.executeQuery('SELECT * FROM resources WHERE id = ?', [id]);
+    console.log('Resource check result:', checkResource);
+    
+    if (checkResource.length === 0) {
+      return res.status(404).json({ message: 'Resource not found' });
+    }
+    
+    // Return the resource data
+    res.status(200).json({
+      message: 'Database test successful',
+      resource: checkResource[0]
+    });
+  } catch (error) {
+    console.error('Database test error:', error);
+    res.status(500).json({ message: 'Database test error', error: error.message });
+  }
+});
+
 // Update resource (admin only)
 router.put('/:id', auth, upload.single('file'), async (req, res) => {
   try {
@@ -129,25 +154,62 @@ router.put('/:id', auth, upload.single('file'), async (req, res) => {
     //   return res.status(403).json({ message: 'Access denied. Admin only.' });
     // }
     console.log('Update request received for resource ID:', id);
+    console.log('Update data:', { title, description, type, url });
+    
+    // First, check if the resource exists
+    const checkResource = await db.executeQuery('SELECT * FROM resources WHERE id = ?', [id]);
+    console.log('Resource check result:', checkResource);
+    
+    if (checkResource.length === 0) {
+      return res.status(404).json({ message: 'Resource not found for update' });
+    }
     
     // Format date in MySQL compatible format (YYYY-MM-DD HH:MM:SS)
     const now = new Date();
     const formattedDate = now.toISOString().slice(0, 19).replace('T', ' ');
     
-    let updateQuery = 'UPDATE resources SET title = ?, description = ?, type = ?, url = ?, updated_at = ?';
-    let queryParams = [title, description, type, url, formattedDate];
+    // Use a direct update query with explicit id comparison
+    const updateQuery = `
+      UPDATE resources 
+      SET title = ?, 
+          description = ?, 
+          type = ?, 
+          url = ?, 
+          updated_at = ? 
+      WHERE id = ?
+    `;
     
-    if (req.file) {
-      updateQuery += ', file_path = ?';
-      queryParams.push(req.file.path);
+    const queryParams = [title, description, type, url, formattedDate, id];
+    
+    console.log('Executing update query:', updateQuery);
+    console.log('Query parameters:', queryParams);
+    
+    try {
+      const result = await db.executeQuery(updateQuery, queryParams);
+      console.log('Update query result:', result);
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: 'Resource not updated - no matching record found' });
+      }
+    } catch (queryError) {
+      console.error('Database update error:', queryError);
+      throw queryError;
     }
     
-    updateQuery += ' WHERE id = ?';
-    queryParams.push(id);
+    // Fetch the updated resource to return to the client
+    const updatedResource = await db.executeQuery(
+      'SELECT r.*, u.name as creator_name FROM resources r LEFT JOIN users u ON r.created_by = u.id WHERE r.id = ?',
+      [id]
+    );
     
-    await db.executeQuery(updateQuery, queryParams);
-    
-    res.status(200).json({ message: 'Resource updated successfully' });
+    if (updatedResource.length > 0) {
+      res.status(200).json({
+        message: 'Resource updated successfully',
+        resource: updatedResource[0]
+      });
+    } else {
+      res.status(200).json({ message: 'Resource updated successfully' });
+    }
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
