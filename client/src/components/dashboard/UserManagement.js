@@ -197,7 +197,8 @@ const UserManagement = () => {
             name: firstName,           // Backend expects 'name' instead of 'firstName'
             surname: lastName,         // Backend expects 'surname' instead of 'lastName'
             email: formData.email,
-            role: formData.role
+            role: formData.role,
+            permissions: formData.permissions  // Include permissions data
           };
           
           // Only include password if it was provided
@@ -306,7 +307,7 @@ const UserManagement = () => {
           >
             <option value="">All Roles</option>
             <option value="admin">Admin</option>
-            <option value="authorised">Authorised</option>
+            <option value="authorized">Authorized</option>
             <option value="regular">Regular User</option>
           </select>
         </FilterDropdown>
@@ -439,7 +440,7 @@ const UserManagement = () => {
                     required
                   >
                     <option value="regular">Regular User</option>
-                    <option value="authorised">Authorised User</option>
+                    <option value="authorized">Authorized User</option>
                     <option value="admin">Admin</option>
                   </Select>
                 </FormGroup>

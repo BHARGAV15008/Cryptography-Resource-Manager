@@ -255,8 +255,45 @@ router.put('/:id', async (req, res) => {
       queryParams
     );
     
-    // If role was updated, update permissions
-    if (role) {
+    // Handle permissions update
+    const { permissions } = req.body;
+    console.log('Received permissions:', permissions);
+    
+    if (permissions) {
+      // Check if user has permissions record
+      const permissionsCheck = await executeQuery(
+        'SELECT * FROM user_permissions WHERE user_id = ?',
+        [userId]
+      );
+      
+      if (permissionsCheck.length === 0) {
+        // Create permissions record if it doesn't exist
+        await executeQuery(
+          'INSERT INTO user_permissions (user_id) VALUES (?)',
+          [userId]
+        );
+      }
+      
+      // Update permissions with values from client
+      await executeQuery(
+        `UPDATE user_permissions SET 
+         access_dashboard = ?, 
+         manage_users = ?, 
+         manage_contents = ?,
+         can_view_analytics = ? 
+         WHERE user_id = ?`,
+        [
+          permissions.canAccessDashboard || false,
+          permissions.canManageUsers || false,
+          permissions.canManageContent || false,
+          permissions.canViewAnalytics || false,
+          userId
+        ]
+      );
+      
+      console.log('Updated permissions for user:', userId);
+    } else if (role) {
+      // Fallback to role-based permissions if no custom permissions sent
       await executeQuery(
         `UPDATE user_permissions SET 
          manage_users = ?, 
