@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import axios from 'axios';
@@ -32,6 +32,47 @@ const Resources = () => {
     };
   };
   
+  // Function to load mock data when server is unavailable
+  const loadMockData = () => {
+    console.log('Loading mock resource data');
+    // Mock resource data
+    const mockResources = [
+      {
+        id: 1,
+        title: 'Introduction to Cryptography',
+        description: 'A comprehensive introduction to cryptographic concepts',
+        type: 'article',
+        url: 'https://example.com/intro-crypto',
+        tags: ['basics', 'encryption'],
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 2,
+        title: 'Advanced Encryption Standards',
+        description: 'Deep dive into AES encryption',
+        type: 'video',
+        url: 'https://example.com/aes-video',
+        tags: ['encryption', 'advanced'],
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 3,
+        title: 'Public Key Infrastructure',
+        description: 'Understanding PKI and its applications',
+        type: 'document',
+        url: 'https://example.com/pki-doc',
+        tags: ['security', 'certificates'],
+        createdAt: new Date().toISOString()
+      }
+    ];
+    
+    setResources(mockResources);
+    // Extract unique tags from mock resources
+    const tags = [...new Set(mockResources.flatMap(resource => resource.tags))];
+    setAvailableTags(tags);
+    setLoading(false);
+  };
+
   useEffect(() => {
     // Check server status first
     const checkServerStatus = async () => {
@@ -42,11 +83,11 @@ const Resources = () => {
           fetchResources();
         } else {
           console.log('Server reported issues, using local mock data');
-          useLocalMockData();
+          loadMockData();
         }
       } catch (error) {
         console.log('Server health check failed, using local mock data', error);
-        useLocalMockData();
+        loadMockData();
       }
     };
     
@@ -64,7 +105,7 @@ const Resources = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [location.key]); // Re-fetch when location changes (user navigates back to page)
+  }, [location.key, fetchResources]); // Re-fetch when location changes (user navigates back to page)
 
   const useLocalMockData = () => {
     console.log('Using local mock data directly from the client');
@@ -126,7 +167,7 @@ const Resources = () => {
     setAvailableTags(Array.from(tags));
   };
 
-  const fetchResources = async () => {
+  const fetchResources = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -237,7 +278,7 @@ const Resources = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [getAuthHeader]);
   
   const handleRefresh = () => {
     fetchResources();

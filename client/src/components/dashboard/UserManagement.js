@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiPlus, FiEdit2, FiTrash2, FiX, FiCheck, FiSearch, FiFilter, FiCalendar } from 'react-icons/fi';
+import { FiPlus, FiEdit2, FiTrash2, FiX, FiCheck, FiSearch, FiFilter } from 'react-icons/fi';
 
 // Helper function to safely format dates
 const formatDate = (dateString) => {
@@ -42,85 +41,28 @@ const UserManagement = () => {
     }
   });
 
-  // Get auth header
-  const getAuthHeader = () => {
-    const token = localStorage.getItem('token');
-    return {
-      headers: {
-        'x-auth-token': token
-      }
-    };
-  };
+  // Auth header function removed as we're using fetch directly
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
   const fetchUsers = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      
-      // Try to fetch from the actual API first
-      try {
-        const endpoint = process.env.NODE_ENV === 'development' 
-          ? '/api/users/mock' 
-          : '/api/users';
+      // Use the public endpoint for development
+      const endpoint = '/api/users/all';
+          
+      const response = await fetch(endpoint);
         
-        const response = await axios.get(endpoint, getAuthHeader());
-        setUsers(response.data);
-        setLoading(false);
-      } catch (apiError) {
-        console.error('API call failed, using mock data instead:', apiError);
-        // Fall back to mock data if API call fails
-        const mockData = [
-          {
-            id: 1,
-            name: 'Admin User',
-            email: 'admin@example.com',
-            role: 'admin',
-            permissions: {
-              canAccessDashboard: true,
-              canManageUsers: true,
-              canManageContent: true,
-              canViewAnalytics: true
-            },
-            emailVerified: true,
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 2, 
-            name: 'Regular User',
-            email: 'user@example.com',
-            role: 'regular',
-            permissions: {
-              canAccessDashboard: true,
-              canManageUsers: false,
-              canManageContent: false,
-              canViewAnalytics: false
-            },
-            emailVerified: true,
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: 3,
-            name: 'Authorised User',
-            email: 'authorised@example.com',
-            role: 'authorised',
-            permissions: {
-              canAccessDashboard: true,
-              canManageUsers: false,
-              canManageContent: true,
-              canViewAnalytics: true
-            },
-            emailVerified: false,
-            createdAt: new Date().toISOString()
-          }
-        ];
-        
-        setUsers(mockData);
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log('Fetched users from database:', data);
+      setUsers(data);
+      setLoading(false); // Set loading to false after successful data fetch
     } catch (err) {
       console.error('Error fetching users:', err);
       
@@ -219,48 +161,30 @@ const UserManagement = () => {
             role: formData.role
           };
           
-          // Actual API call to create user
-          const response = await axios.post('/api/users', userData, getAuthHeader());
-          console.log("User added successfully:", response.data);
+          console.log('Creating new user:', userData);
           
-          // After user is created, update permissions if needed
-          if (response.data && response.data.userId) {
-            const userId = response.data.userId;
-            
-            // Update permissions - convert to the format expected by the backend
-            const permissionsData = {
-              permissions: {
-                canAccessDashboard: formData.permissions.canAccessDashboard,
-                canManageUsers: formData.permissions.canManageUsers,
-                canManageContent: formData.permissions.canManageContent,
-                canViewAnalytics: formData.permissions.canViewAnalytics
-              }
-            };
-            
-            await axios.put(
-              `/api/users/${userId}/permissions`,
-              permissionsData,
-              getAuthHeader()
-            );
-            
-            // Refresh user list
-            fetchUsers();
+          // API call to create user
+          const response = await fetch('/api/users', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(userData)
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Error: ${response.status}`);
           }
-        } catch (apiError) {
-          console.error("API call failed, using mock data instead:", apiError);
           
-          // MOCK ADD USER FUNCTIONALITY as fallback
-          console.log("Adding user (mocked):", formData);
+          const data = await response.json();
+          console.log("User added successfully:", data);
           
-          // Generate a fake ID for the new user
-          const newUser = {
-            ...formData,
-            id: users.length + 1,
-            emailVerified: false,
-            createdAt: new Date().toISOString()
-          };
-          
-          setUsers(prevUsers => [...prevUsers, newUser]);
+          // Refresh user list
+          fetchUsers();
+        } catch (error) {
+          console.error("Error adding user:", error);
+          setError(`Failed to add user: ${error.message}`);
         }
       } else {
         try {
@@ -281,57 +205,36 @@ const UserManagement = () => {
             userData.password = formData.password;
           }
           
+          console.log('Updating user:', formData.id, userData);
+          
           // Update user data
-          await axios.put(`/api/users/${formData.id}`, userData, getAuthHeader());
+          const response = await fetch(`/api/users/${formData.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(userData)
+          });
           
-          // Update permissions - convert to the format expected by the backend
-          const permissionsData = {
-            permissions: {
-              canAccessDashboard: formData.permissions.canAccessDashboard,
-              canManageUsers: formData.permissions.canManageUsers,
-              canManageContent: formData.permissions.canManageContent,
-              canViewAnalytics: formData.permissions.canViewAnalytics
-            }
-          };
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `Error: ${response.status}`);
+          }
           
-          await axios.put(
-            `/api/users/${formData.id}/permissions`,
-            permissionsData,
-            getAuthHeader()
-          );
+          console.log("User updated successfully");
           
           // Refresh users
           fetchUsers();
-        } catch (apiError) {
-          console.error("API call failed, using mock data instead:", apiError);
-          
-          // MOCK UPDATE USER FUNCTIONALITY as fallback
-          console.log("Updating user (mocked):", formData);
-          
-          setUsers(prevUsers => 
-            prevUsers.map(user => 
-              user.id === formData.id 
-                ? { ...user, ...formData }
-                : user
-            )
-          );
+        } catch (error) {
+          console.error("Error updating user:", error);
+          setError(`Failed to update user: ${error.message}`);
         }
       }
       
       handleCloseModal();
     } catch (err) {
       console.error(`Error ${modalMode === 'add' ? 'adding' : 'updating'} user:`, err);
-      
-      let errorMessage = `Failed to ${modalMode} user`;
-      if (err.response) {
-        errorMessage += `: ${err.response.data?.message || 'Unknown error'}`;
-      } else if (err.request) {
-        errorMessage += ': No response from server';
-      } else {
-        errorMessage += `: ${err.message}`;
-      }
-      
-      setError(errorMessage);
+      setError(`Failed to ${modalMode === 'add' ? 'add' : 'update'} user: ${err.message}`);
     }
   };
 
@@ -339,34 +242,27 @@ const UserManagement = () => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
         setError(null);
+        console.log('Deleting user with ID:', userId);
         
-        try {
-          // Actual API call to delete user
-          await axios.delete(`/api/users/${userId}`, getAuthHeader());
-          console.log("User deleted successfully");
-          
-          // Refresh users after successful deletion
-          fetchUsers();
-        } catch (apiError) {
-          console.error("API call failed, using mock deletion instead:", apiError);
-          
-          // MOCK DELETE USER FUNCTIONALITY as fallback
-          console.log("Deleting user (mocked):", userId);
-          setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
+        // Call the API to delete the user
+        const response = await fetch(`/api/users/${userId}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || `Error: ${response.status}`);
         }
+        
+        console.log('User deleted successfully');
+        // Refresh the user list
+        fetchUsers();
       } catch (err) {
         console.error('Error deleting user:', err);
-        
-        let errorMessage = 'Failed to delete user';
-        if (err.response) {
-          errorMessage += `: ${err.response.data?.message || 'Unknown error'}`;
-        } else if (err.request) {
-          errorMessage += ': No response from server';
-        } else {
-          errorMessage += `: ${err.message}`;
-        }
-        
-        setError(errorMessage);
+        setError(`Failed to delete user: ${err.message}`);
       }
     }
   };

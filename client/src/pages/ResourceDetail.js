@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import axios from 'axios';
@@ -27,24 +27,8 @@ const ResourceDetail = () => {
     };
   };
   
-  useEffect(() => {
-    fetchResource();
-    
-    // Add visibility change listener to refresh data when user returns to the page
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchResource();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [id]);
-  
-  const fetchResource = async () => {
+  // Use useCallback to memoize the fetchResource function
+  const fetchResource = useCallback(async () => {
     try {
       if (loading) {
         setLoading(true);
@@ -123,7 +107,24 @@ const ResourceDetail = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [id, user, loading]);
+
+  useEffect(() => {
+    fetchResource();
+    
+    // Add visibility change listener to refresh data when user returns to the page
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchResource();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchResource]);
   
   const handleRefresh = () => {
     fetchResource();
