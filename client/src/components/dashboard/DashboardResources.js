@@ -26,76 +26,22 @@ const DashboardResources = () => {
 
   // Define fetchResources with useCallback to prevent it from causing infinite re-renders
   const fetchResources = useCallback(async (forceRefresh = false) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
+      // Add a cache-busting parameter when force refreshing
+      const url = forceRefresh 
+        ? `/api/resources?_=${new Date().getTime()}` 
+        : '/api/resources';
+        
+      console.log(`Fetching resources from server${forceRefresh ? ' (forced refresh)' : ''}`);
       
-      try {
-        // Add a cache-busting parameter when force refreshing
-        const timestamp = forceRefresh ? `?t=${new Date().getTime()}` : '';
-        console.log('Fetching resources from server' + (forceRefresh ? ' (forced refresh)' : ''));
-        
-        // API endpoint with proper auth header
-        const response = await axios.get(`/api/resources${timestamp}`, getAuthHeader());
-        console.log('Resources fetched successfully:', response.data);
-        setResources(response.data);
-        setLoading(false);
-      } catch (apiError) {
-        console.error('API call failed, trying mock endpoint:', apiError);
-        
-        try {
-          // Try the mock endpoint
-          const mockResponse = await axios.get('/api/resources/mock', getAuthHeader());
-          console.log('Using mock endpoint data');
-          setResources(mockResponse.data);
-          setLoading(false);
-        } catch (mockError) {
-          console.error('Mock endpoint also failed, using fallback data:', mockError);
-          
-          // Use hardcoded mock data as last resort
-          const mockResources = [
-            {
-              id: 1,
-              title: 'Introduction to Symmetric Cryptography',
-              description: 'A comprehensive overview of symmetric encryption techniques',
-              type: 'video',
-              url: 'https://example.com/video1',
-              file_path: null,
-              created_by: 1,
-              creator_name: 'Dr. Jane Smith',
-              tags: ['symmetric', 'encryption', 'basics'],
-              createdAt: new Date().toISOString()
-            },
-            {
-              id: 2,
-              title: 'Public Key Infrastructure Explained',
-              description: 'Deep dive into PKI and its applications in modern cryptography',
-              type: 'pdf',
-              url: 'https://example.com/pki-guide.pdf',
-              file_path: '/uploads/resources/pki-guide.pdf',
-              created_by: 2,
-              creator_name: 'Prof. John Doe',
-              tags: ['PKI', 'asymmetric', 'advanced'],
-              createdAt: new Date().toISOString()
-            },
-            {
-              id: 3,
-              title: 'Blockchain and Cryptography',
-              description: 'How cryptographic principles are used in blockchain technology',
-              type: 'book',
-              url: 'https://example.com/blockchain-book',
-              file_path: null,
-              created_by: 1,
-              creator_name: 'Michael Chen',
-              tags: ['blockchain', 'applications', 'modern'],
-              createdAt: new Date().toISOString()
-            }
-          ];
-          
-          setResources(mockResources);
-          setLoading(false);
-        }
-      }
+      // API endpoint with proper auth header
+      const response = await axios.get(url, getAuthHeader());
+      console.log('Resources fetched successfully:', response.data);
+      setResources(response.data);
+      setLoading(false);
     } catch (err) {
       console.error('Error fetching resources:', err);
       
@@ -187,13 +133,30 @@ const DashboardResources = () => {
   const handleResourceAdded = (newResource) => {
     console.log('Resource added/updated:', newResource);
     
-    // Instead of manually updating the state, force a fresh fetch from the server
-    // This ensures we always have the latest data from the database
-    fetchResources(true); // true = force refresh with cache busting
-    
-    // Reset editing state
-    setIsEditing(false);
-    setResourceToEdit(null);
+    // Check if this is an update to an existing resource or a new resource
+    if (isEditing && resourceToEdit) {
+      // Update existing resource in local state
+      setResources(prev => prev.map(resource => {
+        // Match by id or _id to handle both regular and MongoDB IDs
+        if ((resource.id && resource.id === newResource.id) || 
+            (resource._id && resource._id === newResource._id) ||
+            (resourceToEdit.id && resourceToEdit.id === resource.id) ||
+            (resourceToEdit._id && resourceToEdit._id === resource._id)) {
+          return { ...resource, ...newResource };
+        }
+        return resource;
+      }));
+      
+      // Reset editing state
+      setIsEditing(false);
+      setResourceToEdit(null);
+      
+      // Force a refresh to ensure we have the latest data from the server
+      fetchResources(true);
+    } else {
+      // Add new resource
+      setResources(prev => [...prev, newResource]);
+    }
   };
 
   const getTypeIcon = (type) => {

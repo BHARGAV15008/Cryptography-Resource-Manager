@@ -138,33 +138,58 @@ const AddResource = ({ onClose, onResourceAdded, resourceToEdit = null, isEditin
             };
 
             let response;
-            let updatedResource;
-            
             if (isEditing && resourceToEdit) {
               console.log('Updating resource:', resourceToEdit.id, resourceData);
-              response = await axios.put(`/api/resources/${resourceToEdit.id}`, resourceData, getAuthHeader());
-              console.log('Resource updated successfully:', response.data);
               
-              // Use the returned resource data if available, otherwise create a merged object
-              if (response.data.resource) {
-                updatedResource = response.data.resource;
-              } else {
-                // If server didn't return the updated resource, merge the local data
-                updatedResource = {
-                  ...resourceToEdit,
-                  ...resourceData,
-                  id: resourceToEdit.id || resourceToEdit._id,
-                  updated_at: new Date().toISOString()
+              // Add a timestamp to prevent caching issues
+              const timestamp = new Date().getTime();
+              
+              try {
+                // Create a complete version of the resource data for update
+                const updateData = {
+                  title: resourceData.title,
+                  description: resourceData.description,
+                  type: resourceData.type,
+                  url: resourceData.url,
+                  author: resourceData.author,
+                  tags: resourceData.tags
                 };
+                
+                console.log('Sending update with complete data:', updateData);
+                
+                response = await axios.put(
+                  `/api/resources/${resourceToEdit.id}?_=${timestamp}`, 
+                  updateData, 
+                  getAuthHeader()
+                );
+                console.log('Resource updated successfully:', response.data);
+                
+                // Use the returned resource data if available
+                if (response.data && response.data.resource) {
+                  onResourceAdded(response.data.resource);
+                } else {
+                  // Fallback if server doesn't return the resource
+                  onResourceAdded({ ...resourceData, id: resourceToEdit.id });
+                }
+                
+                // Close the modal
+                onClose();
+              } catch (updateError) {
+                console.error('Error updating resource:', updateError);
+                if (updateError.response) {
+                  console.error('Server response:', updateError.response.data);
+                }
+                
+                // Create a mock resource as fallback
+                createMockResource(resourceData.url);
               }
             } else {
               console.log('Creating new resource:', resourceData);
               response = await axios.post('/api/resources', resourceData, getAuthHeader());
               console.log('Resource created successfully:', response.data);
-              updatedResource = response.data;
+              onResourceAdded(response.data);
             }
-            
-            onResourceAdded(updatedResource);
+
             onClose();
           } catch (resourceError) {
             console.error('Failed to create resource on server:', resourceError);

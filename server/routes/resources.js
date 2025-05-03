@@ -118,98 +118,116 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   }
 });
 
-// Test endpoint to verify database operations
-router.get('/test-db/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log('Testing database operations for resource ID:', id);
-    
-    // First, check if the resource exists
-    const checkResource = await db.executeQuery('SELECT * FROM resources WHERE id = ?', [id]);
-    console.log('Resource check result:', checkResource);
-    
-    if (checkResource.length === 0) {
-      return res.status(404).json({ message: 'Resource not found' });
-    }
-    
-    // Return the resource data
-    res.status(200).json({
-      message: 'Database test successful',
-      resource: checkResource[0]
-    });
-  } catch (error) {
-    console.error('Database test error:', error);
-    res.status(500).json({ message: 'Database test error', error: error.message });
-  }
-});
-
 // Update resource (admin only)
 router.put('/:id', auth, upload.single('file'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, type, url } = req.body;
+    const { title, description, type, url, author, tags } = req.body;
     
     // Check if user is admin - temporarily disabled for testing
     // if (req.user.role !== 'admin') {
     //   return res.status(403).json({ message: 'Access denied. Admin only.' });
     // }
     console.log('Update request received for resource ID:', id);
-    console.log('Update data:', { title, description, type, url });
+    console.log('Update data:', { title, description, type, url, author, tags });
     
     // First, check if the resource exists
-    const checkResource = await db.executeQuery('SELECT * FROM resources WHERE id = ?', [id]);
-    console.log('Resource check result:', checkResource);
+    const existingResource = await db.executeQuery(
+      'SELECT * FROM resources WHERE id = ?',
+      [id]
+    );
     
-    if (checkResource.length === 0) {
-      return res.status(404).json({ message: 'Resource not found for update' });
+    if (existingResource.length === 0) {
+      return res.status(404).json({ message: 'Resource not found' });
     }
     
     // Format date in MySQL compatible format (YYYY-MM-DD HH:MM:SS)
     const now = new Date();
     const formattedDate = now.toISOString().slice(0, 19).replace('T', ' ');
     
-    // Use a direct update query with explicit id comparison
-    const updateQuery = `
-      UPDATE resources 
-      SET title = ?, 
-          description = ?, 
-          type = ?, 
-          url = ?, 
-          updated_at = ? 
-      WHERE id = ?
-    `;
+    // Start building the update query - include author field
+    let updateQuery = 'UPDATE resources SET title = ?, description = ?, type = ?, url = ?, updated_at = ?';
+    let queryParams = [title, description, type, url, formattedDate];
     
-    const queryParams = [title, description, type, url, formattedDate, id];
-    
-    console.log('Executing update query:', updateQuery);
-    console.log('Query parameters:', queryParams);
-    
-    try {
-      const result = await db.executeQuery(updateQuery, queryParams);
-      console.log('Update query result:', result);
-      
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ message: 'Resource not updated - no matching record found' });
-      }
-    } catch (queryError) {
-      console.error('Database update error:', queryError);
-      throw queryError;
+    // Add author if provided
+    if (author) {
+      updateQuery += ', author = ?';
+      queryParams.push(author);
     }
     
-    // Fetch the updated resource to return to the client
+    // Handle file if uploaded
+    if (req.file) {
+      updateQuery += ', file_path = ?';
+      queryParams.push(req.file.path);
+    }
+    
+    // Finalize the query
+    updateQuery += ' WHERE id = ?';
+    queryParams.push(id);
+    
+    console.log('Update query:', updateQuery);
+    console.log('Query parameters:', queryParams);
+    
+    const updateResult = await db.executeQuery(updateQuery, queryParams);
+    console.log('Update query result:', updateResult);
+    
+    if (updateResult.affectedRows === 0) {
+      return res.status(404).json({ message: 'Resource not found or no changes made' });
+    }
+    
+    // Handle tags if provided (requires separate handling as they're stored in a different way)
+    if (tags && Array.isArray(tags) && tags.length > 0) {
+      try {
+        // First, delete existing tags for this resource
+        await db.executeQuery('DELETE FROM resource_tags WHERE resource_id = ?', [id]);
+        
+        // Then insert new tags
+        for (const tag of tags) {
+          await db.executeQuery(
+            'INSERT INTO resource_tags (resource_id, tag) VALUES (?, ?)',
+            [id, tag]
+          );
+        }
+        
+        console.log(`Updated ${tags.length} tags for resource ${id}`);
+      } catch (tagError) {
+        console.error('Error updating tags:', tagError);
+        // Continue with the response even if tag update fails
+      }
+    }
+    
+    // Fetch the updated resource to return it
     const updatedResource = await db.executeQuery(
       'SELECT r.*, u.name as creator_name FROM resources r LEFT JOIN users u ON r.created_by = u.id WHERE r.id = ?',
       [id]
     );
     
-    if (updatedResource.length > 0) {
-      res.status(200).json({
-        message: 'Resource updated successfully',
-        resource: updatedResource[0]
-      });
-    } else {
-      res.status(200).json({ message: 'Resource updated successfully' });
+    console.log('Updated resource query result:', updatedResource);
+    
+    if (updatedResource.length === 0) {
+      return res.status(404).json({ message: 'Resource not found after update' });
     }
+    
+    // Fetch tags for this resource
+    const resourceTags = await db.executeQuery(
+      'SELECT tag FROM resource_tags WHERE resource_id = ?',
+      [id]
+    );
+    
+    // Extract tags into an array
+    const tagsArray = resourceTags.map(row => row.tag);
+    
+    // Add tags to the resource object
+    const resourceWithTags = {
+      ...updatedResource[0],
+      tags: tagsArray
+    };
+    
+    // Return the updated resource with success message
+    res.status(200).json({
+      message: 'Resource updated successfully',
+      resource: resourceWithTags
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
