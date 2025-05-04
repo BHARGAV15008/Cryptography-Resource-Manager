@@ -40,7 +40,9 @@ const Lectures = () => {
 
   const fetchCourses = async () => {
     try {
-      const response = await axios.get('/api/courses');
+      console.log('Fetching courses from API...');
+      const response = await axios.get('http://localhost:5001/api/courses');
+      console.log('Courses data received:', response.data);
       setCourses(response.data);
     } catch (err) {
       console.error('Error fetching courses:', err);
@@ -49,7 +51,9 @@ const Lectures = () => {
 
   const handleAddCourse = async () => {
     try {
-      await axios.post('/api/courses', newCourse);
+      console.log('Adding new course with data:', newCourse);
+      const response = await axios.post('http://localhost:5001/api/courses', newCourse);
+      console.log('Course added successfully:', response.data);
       setShowAddCourse(false);
       setNewCourse({ name: '', description: '' });
       fetchCourses();
@@ -60,10 +64,59 @@ const Lectures = () => {
 
   const handleAddLecture = async () => {
     try {
-      await axios.post('/api/lectures', {
-        ...newLecture,
-        courseId: selectedCourse.id
+      if (!selectedCourse) {
+        console.error('No course selected. Cannot add lecture.');
+        return;
+      }
+      
+      // Ensure courseId is definitely a number
+      const courseId = parseInt(selectedCourse.id, 10);
+      if (isNaN(courseId)) {
+        console.error('Invalid course ID:', selectedCourse.id);
+        return;
+      }
+      
+      // Check if required fields are filled in
+      if (!newLecture.lectureNo || !newLecture.topic) {
+        alert('Please fill in all required fields (Lecture Number and Topic)');
+        return;
+      }
+      
+      console.log('Adding new lecture...');
+      console.log('Selected course for this lecture:', selectedCourse);
+      
+      // Use FormData for file uploads
+      const formData = new FormData();
+      formData.append('courseId', courseId);
+      formData.append('lectureNo', newLecture.lectureNo);
+      formData.append('topic', newLecture.topic);
+      formData.append('date', newLecture.date || new Date().toISOString().split('T')[0]);
+      
+      // Handle different types of notes
+      if (newLecture.notes.type === 'url') {
+        formData.append('notes[type]', 'url');
+        formData.append('notes[content]', newLecture.notes.content || '');
+      } else if (newLecture.notes.type === 'pdf' && newLecture.notes.file) {
+        // Append file for PDF uploads
+        formData.append('notes[type]', 'pdf');
+        formData.append('notes[content]', newLecture.notes.content || 'PDF Document');
+        formData.append('pdfFile', newLecture.notes.file);
+        console.log('Appended PDF file to form data:', newLecture.notes.file.name);
+      }
+      
+      console.log('Sending form data to server...');
+      
+      const response = await axios.post('http://localhost:5001/api/lectures', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       });
+      
+      console.log('Lecture added successfully:', response.data);
+      
+      // Show success message
+      alert(`Lecture "${newLecture.topic}" added successfully`);
+      
       setShowAddLecture(false);
       setNewLecture({
         courseId: '',
@@ -72,9 +125,12 @@ const Lectures = () => {
         date: '',
         notes: { type: 'url', content: '' }
       });
+      
+      // Refresh the courses data to see the new lecture
       fetchCourses();
     } catch (err) {
       console.error('Error adding lecture:', err);
+      alert('Failed to add lecture. See console for details.');
     }
   };
 
@@ -111,18 +167,29 @@ const Lectures = () => {
             <Select
               value={selectedCourse?.id || ''}
               onChange={(e) => {
-                const course = courses.find(c => c.id === e.target.value);
+                console.log('Selected course ID from dropdown:', e.target.value);
+                console.log('Available courses:', courses);
+                // Convert the selected value to a number since IDs are stored as numbers
+                const courseId = parseInt(e.target.value, 10);
+                const course = courses.find(c => c.id === courseId);
+                console.log('Found course:', course);
                 setSelectedCourse(course);
               }}
               style={{ marginRight: '1rem' }}
             >
               <option value="">Select Course</option>
-              {courses.map(course => (
-                <option key={course.id} value={course.id}>{course.name}</option>
-              ))}
+              {courses.map(course => {
+                console.log('Rendering course option:', course.id, course.name);
+                return (
+                  <option key={course.id} value={course.id}>{course.name}</option>
+                );
+              })}
             </Select>
             <AddButton 
-              onClick={() => setShowAddLecture(true)}
+              onClick={() => {
+                console.log('Add Lecture button clicked, selected course:', selectedCourse);
+                setShowAddLecture(true);
+              }}
               disabled={!selectedCourse}
             >
               <FiPlus /> Add Lecture
@@ -152,7 +219,14 @@ const Lectures = () => {
                         <FiLink /> View Notes
                       </NoteLink>
                     ) : (
-                      <NoteLink href={lecture.notes.content} download>
+                      <NoteLink 
+                        href={`http://localhost:5001${lecture.notes.url || lecture.notes.fileInfo?.url || '/api/lectures/download/' + encodeURIComponent(lecture.notes.content)}`} 
+                        download={lecture.notes.content}
+                        target="_blank"
+                        onClick={(e) => {
+                          console.log('Download link clicked:', e.currentTarget.href);
+                        }}
+                      >
                         <FiDownload /> Download PDF
                       </NoteLink>
                     )}
@@ -228,11 +302,31 @@ const Lectures = () => {
                 })}
               />
             ) : (
-              <Input
-                type="file"
-                accept=".pdf"
-                onChange={(e) => {/* Add file handling logic */}}
-              />
+              <div>
+                <Input
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      console.log('File selected:', file.name, file.type, file.size);
+                      setNewLecture({
+                        ...newLecture,
+                        notes: { 
+                          ...newLecture.notes, 
+                          content: file.name,
+                          file: file
+                        }
+                      });
+                    }
+                  }}
+                />
+                {newLecture.notes.content && newLecture.notes.type === 'pdf' && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#666' }}>
+                    Selected file: {newLecture.notes.content}
+                  </div>
+                )}
+              </div>
             )}
             <ButtonGroup>
               <Button onClick={handleAddLecture}>Add</Button>
@@ -351,7 +445,10 @@ const ButtonGroup = styled.div`
   justify-content: flex-end;
 `;
 
-const Button = styled.button`
+const Button = styled.button.attrs(props => ({
+  // Strip out custom props so they don't get passed to the DOM element
+  secondary: undefined
+}))`
   padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 4px;

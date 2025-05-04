@@ -33,6 +33,15 @@ async function initializeDatabase() {
       console.warn('Professors and projects tables SQL file not found, skipping');
     }
     
+    // Read and add courses lectures tables SQL
+    const coursesLecturesSqlPath = path.join(__dirname, 'courses_lectures_tables.sql');
+    let coursesLecturesSql = '';
+    try {
+      coursesLecturesSql = fs.readFileSync(coursesLecturesSqlPath, 'utf8');
+    } catch (err) {
+      console.warn('Courses lectures tables SQL file not found, skipping');
+    }
+    
     // Read and add OTP verification table SQL
     const otpSqlPath = path.join(__dirname, 'otp_table.sql');
     let otpSql = '';
@@ -78,6 +87,17 @@ async function initializeDatabase() {
       console.log('Creating professors and projects tables...');
       const professorsStatements = professorsSql.split(';').filter(stmt => stmt.trim());
       for (let statement of professorsStatements) {
+        if (statement.trim()) {
+          await connection.query(statement);
+        }
+      }
+    }
+    
+    // Execute courses and lectures tables SQL if available
+    if (coursesLecturesSql) {
+      console.log('Creating courses and lectures tables...');
+      const coursesLecturesStatements = coursesLecturesSql.split(';').filter(stmt => stmt.trim());
+      for (let statement of coursesLecturesStatements) {
         if (statement.trim()) {
           await connection.query(statement);
         }
