@@ -41,8 +41,10 @@ app.use((req, res, next) => {
 const mockDatabase = {
   courses: [],
   lectures: [],
+  events: [],
   lastCourseId: 0,
-  lastLectureId: 0
+  lastLectureId: 0,
+  lastEventId: 0
 };
 
 // Generate a test course
@@ -352,6 +354,141 @@ app.get('/api/lectures/:id', verifyToken, (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
+
+// Events endpoints
+// GET all events
+app.get('/api/events', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching all events...');
+    res.json(mockDatabase.events);
+  } catch (err) {
+    console.error('Error fetching events:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// POST create a new event
+app.post('/api/events', verifyToken, upload.single('eventImage'), (req, res) => {
+  try {
+    console.log('Adding new event...');
+    console.log('Request body:', req.body);
+    
+    const { title, description, startDate, endDate, location, organizerName, eventType } = req.body;
+    
+    // Create event object
+    const newEvent = {
+      id: ++mockDatabase.lastEventId,
+      title: title || 'Untitled Event',
+      description: description || '',
+      startDate: startDate || new Date().toISOString(),
+      endDate: endDate || new Date().toISOString(),
+      location: location || 'TBD',
+      organizerName: organizerName || 'Anonymous',
+      eventType: eventType || 'workshop',
+      imageUrl: req.file ? `/uploads/${req.file.filename}` : null,
+      created_by: req.user?.id || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    // Add to mock database
+    mockDatabase.events.push(newEvent);
+    
+    console.log(`Event created with ID: ${newEvent.id}`);
+    console.log(`Now we have ${mockDatabase.events.length} events.`);
+    
+    res.status(201).json({
+      message: 'Event created successfully',
+      event: newEvent
+    });
+  } catch (err) {
+    console.error('Error creating event:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// GET event by ID
+app.get('/api/events/:id', verifyToken, (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id);
+    console.log(`Fetching event with ID: ${eventId}`);
+    
+    const event = mockDatabase.events.find(event => event.id === eventId);
+    
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+    
+    res.json(event);
+  } catch (err) {
+    console.error('Error fetching event:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// DELETE event
+app.delete('/api/events/:id', verifyToken, (req, res) => {
+  try {
+    const eventId = parseInt(req.params.id);
+    console.log(`Deleting event with ID: ${eventId}`);
+    
+    const eventIndex = mockDatabase.events.findIndex(event => event.id === eventId);
+    
+    if (eventIndex === -1) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+    
+    mockDatabase.events.splice(eventIndex, 1);
+    
+    console.log(`Event with ID ${eventId} has been deleted`);
+    console.log(`Now we have ${mockDatabase.events.length} events.`);
+    
+    res.json({ message: 'Event deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting event:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Add some mock events for testing
+const addMockEvents = () => {
+  if (mockDatabase.events.length === 0) {
+    mockDatabase.events.push({
+      id: ++mockDatabase.lastEventId,
+      title: 'Cryptography Workshop 2025',
+      description: 'A hands-on workshop covering the latest cryptographic algorithms and techniques.',
+      startDate: '2025-06-15T09:00:00Z',
+      endDate: '2025-06-15T17:00:00Z',
+      location: 'Virtual Event',
+      organizerName: 'Cryptography Research Group',
+      eventType: 'workshop',
+      imageUrl: null,
+      created_by: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    
+    mockDatabase.events.push({
+      id: ++mockDatabase.lastEventId,
+      title: 'International Cryptography Conference',
+      description: 'Annual conference bringing together researchers and practitioners in cryptography.',
+      startDate: '2025-07-20T09:00:00Z',
+      endDate: '2025-07-23T17:00:00Z',
+      location: 'Berlin, Germany',
+      organizerName: 'International Association for Cryptographic Research',
+      eventType: 'conference',
+      imageUrl: null,
+      created_by: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    
+    console.log(`Added ${mockDatabase.events.length} mock events.`);
+  }
+};
+
+// Initialize mock events
+addMockEvents();
 
 // 404 handler
 app.use('*', (req, res) => {
