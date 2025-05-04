@@ -37,11 +37,11 @@ CREATE TABLE IF NOT EXISTS projects (
 );
 
 -- Sample data for professors
-INSERT INTO professors (name, title, email, specialization, description, image_url, website_url)
+INSERT INTO professors (name, title, email, specialization, department, description, image_url, website_url)
 VALUES 
-('Dr. Anand Kumar', 'Associate Professor', 'anand@iiitd.ac.in', 'Post-Quantum Cryptography', 'Dr. Kumar specializes in post-quantum cryptography and has published extensively in the field.', '/images/professors/anand-kumar.jpg', 'https://faculty.iiitd.ac.in/anand'),
-('Dr. Sneha Sharma', 'Assistant Professor', 'sneha@iiitd.ac.in', 'Blockchain Security', 'Dr. Sharma focuses on blockchain security and distributed systems.', '/images/professors/sneha-sharma.jpg', 'https://faculty.iiitd.ac.in/sneha'),
-('Dr. Rajiv Mehta', 'Professor', 'rajiv@iiitd.ac.in', 'Cryptanalysis', 'Dr. Mehta is an expert in cryptanalysis and secure system design.', '/images/professors/rajiv-mehta.jpg', 'https://faculty.iiitd.ac.in/rajiv');
+('Dr. Anand Kumar', 'Associate Professor', 'anand@iiitd.ac.in', 'Post-Quantum Cryptography', 'Computer Science', 'Dr. Kumar specializes in post-quantum cryptography and has published extensively in the field.', '/images/professors/anand-kumar.jpg', 'https://faculty.iiitd.ac.in/anand'),
+('Dr. Sneha Sharma', 'Assistant Professor', 'sneha@iiitd.ac.in', 'Blockchain Security', 'Information Security', 'Dr. Sharma focuses on blockchain security and distributed systems.', '/images/professors/sneha-sharma.jpg', 'https://faculty.iiitd.ac.in/sneha'),
+('Dr. Rajiv Mehta', 'Professor', 'rajiv@iiitd.ac.in', 'Cryptanalysis', 'Mathematics', 'Dr. Mehta is an expert in cryptanalysis and secure system design.', '/images/professors/rajiv-mehta.jpg', 'https://faculty.iiitd.ac.in/rajiv');
 
 -- Sample data for projects
 INSERT INTO projects (title, description, type, startDate, endDate, professor_id, status, technologies, members, funding_source)

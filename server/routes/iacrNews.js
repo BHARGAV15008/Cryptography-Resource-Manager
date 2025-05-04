@@ -3,7 +3,7 @@ const FeedParser = require('feedparser');
 const axios = require('axios');
 const router = express.Router();
 
-router.get('/api/iacr-news', async (req, res) => {
+router.get('/', async (req, res) => {
   const feedUrl = 'https://www.iacr.org/news/rss';
   
   try {

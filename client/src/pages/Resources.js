@@ -21,6 +21,9 @@ const Resources = () => {
   
   const { user } = useAuth();
   const location = useLocation();
+  
+  // Forward declaration of fetchResources which will be defined below
+  // This ensures it's in scope for the useEffect hook
 
   // Get auth header for API requests
   const getAuthHeader = () => {
@@ -105,7 +108,7 @@ const Resources = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [location.key, fetchResources]); // Re-fetch when location changes (user navigates back to page)
+  }, [location.key]); // Don't reference fetchResources here to avoid the reference error
 
   const useLocalMockData = () => {
     console.log('Using local mock data directly from the client');

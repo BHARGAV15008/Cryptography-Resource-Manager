@@ -42,9 +42,11 @@ const mockDatabase = {
   courses: [],
   lectures: [],
   events: [],
+  resources: [],
   lastCourseId: 0,
   lastLectureId: 0,
-  lastEventId: 0
+  lastEventId: 0,
+  lastResourceId: 0
 };
 
 // Generate a test course
@@ -489,6 +491,322 @@ const addMockEvents = () => {
 
 // Initialize mock events
 addMockEvents();
+
+// Resources endpoints
+// Add some mock resources
+const addMockResources = () => {
+  if (mockDatabase.resources.length === 0) {
+    mockDatabase.resources.push({
+      id: ++mockDatabase.lastResourceId,
+      title: 'Introduction to Symmetric Cryptography',
+      description: 'A comprehensive overview of symmetric encryption techniques',
+      type: 'article',
+      url: 'https://example.com/symmetric-crypto',
+      file_path: null,
+      content: 'Symmetric cryptography is a foundational concept in data security...',
+      created_by: 1,
+      creator_name: 'Dr. Jane Smith',
+      tags: ['symmetric', 'encryption', 'basics'],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    
+    mockDatabase.resources.push({
+      id: ++mockDatabase.lastResourceId,
+      title: 'Public Key Infrastructure Explained',
+      description: 'A deep dive into PKI and its applications in modern security',
+      type: 'pdf',
+      url: null,
+      file_path: '/uploads/sample-pki-document.pdf',
+      content: null,
+      created_by: 1,
+      creator_name: 'Prof. Robert Johnson',
+      tags: ['asymmetric', 'pki', 'certificates'],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    
+    mockDatabase.resources.push({
+      id: ++mockDatabase.lastResourceId,
+      title: 'Blockchain and Cryptography',
+      description: 'How cryptographic principles are used in blockchain technology',
+      type: 'video',
+      url: 'https://example.com/blockchain-video',
+      file_path: null,
+      content: null,
+      created_by: 1,
+      creator_name: 'Michael Chen',
+      tags: ['blockchain', 'applications', 'modern'],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    
+    console.log(`Added ${mockDatabase.resources.length} mock resources.`);
+  }
+};
+
+// Initialize mock resources
+addMockResources();
+
+// IACR News endpoints
+// Add some mock IACR news data
+const addMockIACRNews = () => {
+  if (!mockDatabase.iacrNews) {
+    mockDatabase.iacrNews = [
+      {
+        id: 1,
+        title: 'Call for Papers: CRYPTO 2025',
+        link: 'https://iacr.org/crypto2025',
+        category: 'crypto',
+        date: new Date('2024-12-15').toISOString(),
+        description: 'The 45th Annual International Cryptology Conference will be held in August 2025 in Santa Barbara, California.'
+      },
+      {
+        id: 2,
+        title: 'IACR Fellows 2024 Announced',
+        link: 'https://iacr.org/fellows/2024',
+        category: 'announcement',
+        date: new Date('2024-11-01').toISOString(),
+        description: 'The International Association for Cryptologic Research is pleased to announce the IACR Fellows for 2024.'
+      },
+      {
+        id: 3,
+        title: 'Best Paper Award at ASIACRYPT 2024',
+        link: 'https://iacr.org/asiacrypt2024/awards',
+        category: 'asiacrypt',
+        date: new Date('2024-10-25').toISOString(),
+        description: 'The best paper award at ASIACRYPT 2024 goes to "Advanced Techniques in Post-Quantum Cryptography".'
+      },
+      {
+        id: 4,
+        title: 'New Side-Channel Attack on AES',
+        link: 'https://eprint.iacr.org/2024/123',
+        category: 'ePrint_report',
+        date: new Date('2024-09-20').toISOString(),
+        description: 'Researchers demonstrate a new side-channel attack on hardware implementations of AES.'
+      },
+      {
+        id: 5,
+        title: 'PhD Position in Cryptography at ETH Zurich',
+        link: 'https://iacr.org/jobs/1234',
+        category: 'job_posting',
+        date: new Date('2024-08-15').toISOString(),
+        description: 'The Applied Cryptography Group at ETH Zurich is looking for a PhD student to work on post-quantum cryptography.'
+      },
+      {
+        id: 6,
+        title: 'Workshop on Quantum-Safe Cryptography',
+        link: 'https://quantum-safe-crypto.org/2024',
+        category: 'event_calender',
+        date: new Date('2024-07-10').toISOString(),
+        description: 'A three-day workshop on quantum-safe cryptography will be held in London in November 2024.'
+      },
+      {
+        id: 7,
+        title: 'IACR Elections 2024: Call for Nominations',
+        link: 'https://iacr.org/elections/2024',
+        category: 'election',
+        date: new Date('2024-06-05').toISOString(),
+        description: 'Nominations are open for the positions of President, Vice President, and Directors of the IACR.'
+      },
+      {
+        id: 8,
+        title: 'IACR Distinguished Lecture Series Announced',
+        link: 'https://iacr.org/lectures/2024',
+        category: 'announcement',
+        date: new Date('2024-05-20').toISOString(),
+        description: 'The IACR is pleased to announce the speakers for the 2024 Distinguished Lecture Series.'
+      }
+    ];
+    console.log(`Added ${mockDatabase.iacrNews.length} mock IACR news items.`);
+  }
+};
+
+// Initialize mock IACR news
+addMockIACRNews();
+
+// GET all resources
+app.get('/api/resources', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching all resources...');
+    res.json(mockDatabase.resources);
+  } catch (err) {
+    console.error('Error fetching resources:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// GET resource by ID
+app.get('/api/resources/:id', verifyToken, (req, res) => {
+  try {
+    const resourceId = parseInt(req.params.id);
+    console.log(`Fetching resource with ID: ${resourceId}`);
+    
+    const resource = mockDatabase.resources.find(resource => resource.id === resourceId);
+    
+    if (!resource) {
+      return res.status(404).json({ message: 'Resource not found' });
+    }
+    
+    res.json(resource);
+  } catch (err) {
+    console.error('Error fetching resource:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// POST create a new resource
+app.post('/api/resources', verifyToken, upload.single('resourceFile'), (req, res) => {
+  try {
+    console.log('Adding new resource...');
+    console.log('Request body:', req.body);
+    
+    const { title, description, type, url, tags } = req.body;
+    
+    // Parse tags if they come as a string
+    const parsedTags = typeof tags === 'string' ? JSON.parse(tags) : (tags || []);
+    
+    // Create resource object
+    const newResource = {
+      id: ++mockDatabase.lastResourceId,
+      title: title || 'Untitled Resource',
+      description: description || '',
+      type: type || 'article',
+      url: url || null,
+      file_path: req.file ? `/uploads/${req.file.filename}` : null,
+      content: req.body.content || null,
+      created_by: req.user?.id || 1,
+      creator_name: `${req.user?.firstName || 'Anonymous'} ${req.user?.lastName || 'User'}`,
+      tags: parsedTags,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    // Add to mock database
+    mockDatabase.resources.push(newResource);
+    
+    console.log(`Resource created with ID: ${newResource.id}`);
+    
+    res.status(201).json({
+      message: 'Resource created successfully',
+      resource: newResource
+    });
+  } catch (err) {
+    console.error('Error creating resource:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// IACR News endpoint
+app.get('/api/iacr-news', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching IACR news items...');
+    res.json(mockDatabase.iacrNews);
+  } catch (err) {
+    console.error('Error fetching IACR news:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Articles endpoint
+app.get('/api/articles', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching articles...');
+    // Mock articles if we don't have any in the database
+    if (!mockDatabase.articles) {
+      mockDatabase.articles = [
+        {
+          id: 1,
+          title: 'Understanding Advanced Encryption Standard',
+          content: 'AES is a symmetric encryption algorithm widely used today...',
+          author: 'Dr. Emma Johnson',
+          date: new Date('2024-04-15').toISOString(),
+          tags: ['encryption', 'symmetric', 'AES']
+        },
+        {
+          id: 2,
+          title: 'Future of Quantum Cryptography',
+          content: 'Quantum cryptography leverages the principles of quantum mechanics...',
+          author: 'Prof. David Chen',
+          date: new Date('2024-03-22').toISOString(),
+          tags: ['quantum', 'future', 'security']
+        },
+        {
+          id: 3,
+          title: 'Blockchain Technology Applications in Cryptography',
+          content: 'Blockchain offers significant advantages for secure communications...',
+          author: 'Sarah Williams, PhD',
+          date: new Date('2024-02-10').toISOString(),
+          tags: ['blockchain', 'applications', 'distributed']
+        }
+      ];
+    }
+    res.json(mockDatabase.articles);
+  } catch (err) {
+    console.error('Error fetching articles:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Notes related endpoints for ResourceDetail.js
+app.get('/api/resources/notes', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching resource notes...');
+    // This endpoint is referenced in ResourceDetail.js
+    // Provide mock notes data
+    const notes = [
+      {
+        id: 1,
+        title: 'Cryptographic Key Management',
+        content: 'Notes on various key management techniques and best practices.',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 2,
+        title: 'Symmetric vs Asymmetric Encryption',
+        content: 'Comparison of symmetric and asymmetric encryption methods with use cases.',
+        created_at: new Date().toISOString()
+      }
+    ];
+    
+    res.json(notes);
+  } catch (err) {
+    console.error('Error fetching resource notes:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Bookmarks endpoint (used by ResourceDetail.js)
+app.get('/api/bookmarks', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching user bookmarks...');
+    // Mock bookmarks data
+    const bookmarks = [
+      {
+        id: 1,
+        userId: 1,
+        resourceId: '1',
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 2,
+        userId: 1,
+        resourceId: '3',
+        created_at: new Date().toISOString()
+      }
+    ];
+    
+    res.json(bookmarks);
+  } catch (err) {
+    console.error('Error fetching bookmarks:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
 
 // 404 handler
 app.use('*', (req, res) => {
