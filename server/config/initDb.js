@@ -24,6 +24,15 @@ async function initializeDatabase() {
     const sqlPath = path.join(__dirname, 'tables.sql');
     const sql = fs.readFileSync(sqlPath, 'utf8');
     
+    // Read and add professors and projects tables SQL
+    const professorsSqlPath = path.join(__dirname, 'professors_projects_tables.sql');
+    let professorsSql = '';
+    try {
+      professorsSql = fs.readFileSync(professorsSqlPath, 'utf8');
+    } catch (err) {
+      console.warn('Professors and projects tables SQL file not found, skipping');
+    }
+    
     // Read and add OTP verification table SQL
     const otpSqlPath = path.join(__dirname, 'otp_table.sql');
     let otpSql = '';
@@ -59,7 +68,20 @@ async function initializeDatabase() {
     console.log('Creating OTP verification table...');
     const otpStatements = otpSql.split(';').filter(stmt => stmt.trim());
     for (let statement of otpStatements) {
-      await connection.query(statement);
+      if (statement.trim()) {
+        await connection.query(statement);
+      }
+    }
+    
+    // Execute professors and projects tables SQL if available
+    if (professorsSql) {
+      console.log('Creating professors and projects tables...');
+      const professorsStatements = professorsSql.split(';').filter(stmt => stmt.trim());
+      for (let statement of professorsStatements) {
+        if (statement.trim()) {
+          await connection.query(statement);
+        }
+      }
     }
 
     // Verify critical tables exist

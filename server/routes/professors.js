@@ -49,7 +49,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const [professors] = await pool.query(`
+    const professors = await executeQuery(`
       SELECT p.*, u.name as creator_name 
       FROM professors p 
       LEFT JOIN users u ON p.created_by = u.id
@@ -61,7 +61,7 @@ router.get('/:id', async (req, res) => {
     }
     
     // Get professor's projects
-    const [projects] = await pool.query(`
+    const projects = await executeQuery(`
       SELECT pp.*, pr.title, pr.description, pr.type, pr.thumbnail_url, pr.repo_url, pr.demo_url, pr.members, pr.supervisor
       FROM professor_projects pp
       JOIN projects pr ON pp.project_id = pr.id
@@ -84,7 +84,7 @@ router.get('/:id', async (req, res) => {
 // Add new professor (admin only)
 router.post('/', auth, upload.single('image'), async (req, res) => {
   try {
-    const { name, title, specialization, bio, website_url, email } = req.body;
+    const { name, title, specialization, biography, website, email, department } = req.body;
     const userId = req.user.id;
     
     // Check if user is admin
@@ -97,9 +97,9 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
       imagePath = req.file.path;
     }
     
-    const [result] = await pool.query(
-      'INSERT INTO professors (name, title, specialization, bio, website_url, email, image_url, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [name, title, specialization, bio, website_url, email, imagePath, userId]
+    const result = await executeQuery(
+      'INSERT INTO professors (name, title, department, specialization, biography, website, email, profile_image, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [name, title, department, specialization, biography, website, email, imagePath, userId]
     );
     
     res.status(201).json({ 
@@ -116,25 +116,30 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
 router.put('/:id', auth, upload.single('image'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, title, specialization, bio, website_url, email, status } = req.body;
+    const { name, title, specialization, biography, website, email, status, department } = req.body;
     
     // Check if user is admin
     if (req.user.role !== 'admin' && req.user.role !== 'authorised') {
       return res.status(403).json({ message: 'Access denied. Admin or authorized users only.' });
     }
     
-    let updateQuery = 'UPDATE professors SET name = ?, title = ?, specialization = ?, bio = ?, website_url = ?, email = ?, status = ?';
-    let queryParams = [name, title, specialization, bio, website_url, email, status];
+    let updateQuery = 'UPDATE professors SET name = ?, title = ?, department = ?, specialization = ?, biography = ?, website = ?, email = ?';
+    let queryParams = [name, title, department, specialization, biography, website, email];
+    
+    if (status) {
+      updateQuery += ', status = ?';
+      queryParams.push(status);
+    }
     
     if (req.file) {
-      updateQuery += ', image_url = ?';
+      updateQuery += ', profile_image = ?';
       queryParams.push(req.file.path);
     }
     
     updateQuery += ' WHERE id = ?';
     queryParams.push(id);
     
-    await pool.query(updateQuery, queryParams);
+    await executeQuery(updateQuery, queryParams);
     
     res.status(200).json({ message: 'Professor updated successfully' });
   } catch (error) {
@@ -153,7 +158,7 @@ router.delete('/:id', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Admin only.' });
     }
     
-    await pool.query('DELETE FROM professors WHERE id = ?', [id]);
+    await executeQuery('DELETE FROM professors WHERE id = ?', [id]);
     
     res.status(200).json({ message: 'Professor deleted successfully' });
   } catch (error) {
@@ -173,7 +178,7 @@ router.post('/:professorId/projects', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Admin or authorized users only.' });
     }
     
-    const [result] = await pool.query(
+    const result = await executeQuery(
       'INSERT INTO professor_projects (professor_id, project_id, status, year) VALUES (?, ?, ?, ?)',
       [professorId, projectId, status, year]
     );
@@ -199,7 +204,7 @@ router.put('/:professorId/projects/:projectId', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Admin or authorized users only.' });
     }
     
-    await pool.query(
+    await executeQuery(
       'UPDATE professor_projects SET status = ?, year = ? WHERE professor_id = ? AND project_id = ?',
       [status, year, professorId, projectId]
     );
@@ -221,7 +226,7 @@ router.delete('/:professorId/projects/:projectId', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Admin only.' });
     }
     
-    await pool.query(
+    await executeQuery(
       'DELETE FROM professor_projects WHERE professor_id = ? AND project_id = ?',
       [professorId, projectId]
     );
