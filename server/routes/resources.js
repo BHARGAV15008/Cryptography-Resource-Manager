@@ -38,18 +38,35 @@ const upload = multer({
   }
 });
 
-// Get all resources
+// No more separate routes for resource types - all filtering is done on the main route with query parameters
+
+// Get all resources with optional type filtering through query parameters
 router.get('/', async (req, res) => {
   try {
-    const resources = await db.executeQuery(`
+    // Check if type filter is provided in query parameters
+    const { type } = req.query;
+    
+    let query = `
       SELECT r.*, u.name as creator_name 
       FROM resources r 
       LEFT JOIN users u ON r.created_by = u.id
-    `);
+    `;
+    
+    // Add WHERE clause if type filter is provided
+    if (type && type !== 'all') {
+      query += ` WHERE r.type = '${type}'`;
+    }
+    
+    // Add ORDER BY clause
+    query += ` ORDER BY r.created_at DESC`;
+    
+    console.log(`Fetching resources with type filter: ${type || 'none'}`);
+    const resources = await db.executeQuery(query);
+    
     res.status(200).json(resources);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching resources:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 

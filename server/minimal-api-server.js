@@ -754,6 +754,22 @@ app.get('/api/articles', verifyToken, (req, res) => {
 });
 
 // Notes related endpoints for ResourceDetail.js
+app.get('/api/resources/notes/:id', verifyToken, (req, res) => {
+  try {
+    console.log(`Fetching note resource with ID: ${req.params.id}`);
+    const noteResource = mockDatabase.resources.find(resource => resource.type === 'note' && resource.id == req.params.id);
+    
+    if (!noteResource) {
+      return res.status(404).json({ message: 'Note resource not found' });
+    }
+    
+    res.json(noteResource);
+  } catch (err) {
+    console.error('Error fetching note resource:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 app.get('/api/resources/notes', verifyToken, (req, res) => {
   try {
     console.log('Fetching resource notes...');
@@ -777,6 +793,96 @@ app.get('/api/resources/notes', verifyToken, (req, res) => {
     res.json(notes);
   } catch (err) {
     console.error('Error fetching resource notes:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Resource type-specific endpoints
+// Missing endpoint for ResourceDetail.js when viewing videos
+app.get('/api/resources/videos/:id', verifyToken, (req, res) => {
+  try {
+    console.log(`Fetching video resource with ID: ${req.params.id}`);
+    const videoResource = mockDatabase.resources.find(resource => resource.type === 'video' && resource.id == req.params.id);
+    
+    if (!videoResource) {
+      return res.status(404).json({ message: 'Video resource not found' });
+    }
+    
+    res.json(videoResource);
+  } catch (err) {
+    console.error('Error fetching video resource:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+app.get('/api/resources/videos', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching video resources...');
+    const videoResources = mockDatabase.resources.filter(resource => resource.type === 'video');
+    res.json(videoResources);
+  } catch (err) {
+    console.error('Error fetching video resources:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// Endpoint for accessing specific PDF resource
+app.get('/api/resources/pdfs/:id', verifyToken, (req, res) => {
+  try {
+    console.log(`Fetching PDF resource with ID: ${req.params.id}`);
+    const pdfResource = mockDatabase.resources.find(resource => resource.type === 'pdf' && resource.id == req.params.id);
+    
+    if (!pdfResource) {
+      return res.status(404).json({ message: 'PDF resource not found' });
+    }
+    
+    res.json(pdfResource);
+  } catch (err) {
+    console.error('Error fetching PDF resource:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+app.get('/api/resources/pdfs', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching PDF resources...');
+    const pdfResources = mockDatabase.resources.filter(resource => resource.type === 'pdf');
+    res.json(pdfResources);
+  } catch (err) {
+    console.error('Error fetching PDF resources:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+app.get('/api/resources/documents', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching document resources...');
+    const documentResources = mockDatabase.resources.filter(resource => resource.type === 'document');
+    res.json(documentResources);
+  } catch (err) {
+    console.error('Error fetching document resources:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+app.get('/api/resources/books', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching book resources...');
+    const bookResources = mockDatabase.resources.filter(resource => resource.type === 'book');
+    res.json(bookResources);
+  } catch (err) {
+    console.error('Error fetching book resources:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+app.get('/api/resources/articles', verifyToken, (req, res) => {
+  try {
+    console.log('Fetching article resources...');
+    const articleResources = mockDatabase.resources.filter(resource => resource.type === 'article');
+    res.json(articleResources);
+  } catch (err) {
+    console.error('Error fetching article resources:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });

@@ -125,6 +125,8 @@ try {
 try {
   app.use('/api/resources', require('./routes/resources'));
   console.log('Registered /api/resources route');
+  app.use('/api/bookmarks', require('./routes/bookmarks'));
+  console.log('Registered /api/bookmarks route');
   app.use('/api/dashboard', require('./routes/dashboard'));
   console.log('Registered /api/dashboard route');
   app.use('/api/events', require('./routes/events'));

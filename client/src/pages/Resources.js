@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import axios from 'axios';
 import { FaPlus, FaSearch, FaFilter, FaVideo, FaFileAlt, FaBook, FaQuoteLeft, FaExternalLinkAlt, FaDownload, FaCopy, FaSync } from 'react-icons/fa';
@@ -21,6 +21,24 @@ const Resources = () => {
   
   const { user } = useAuth();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Initialize filters from URL query parameters and update URL when filters change
+  useEffect(() => {
+    const typeParam = searchParams.get('type');
+    if (typeParam) {
+      setFilters(prev => ({ ...prev, type: typeParam }));
+    }
+  }, [searchParams]);
+  
+  // Update URL when filters change through the UI
+  const updateUrlWithFilters = (newFilters) => {
+    const params = {};
+    if (newFilters.type && newFilters.type !== 'all') {
+      params.type = newFilters.type;
+    }
+    setSearchParams(params, { replace: true });
+  };
   
   // Forward declaration of fetchResources which will be defined below
   // This ensures it's in scope for the useEffect hook
@@ -108,7 +126,7 @@ const Resources = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [location.key]); // Don't reference fetchResources here to avoid the reference error
+  }, [location.key, searchParams]); // Add searchParams to the dependency array to react to URL changes
 
   const useLocalMockData = () => {
     console.log('Using local mock data directly from the client');
@@ -177,9 +195,23 @@ const Resources = () => {
       setRefreshing(true);
       
       try {
+        // Check if we have a type filter from URL parameters
+        const typeParam = searchParams.get('type');
+        // If we have a type parameter, update the filter state
+        if (typeParam && typeParam !== 'all') {
+          setFilters(prev => ({ ...prev, type: typeParam }));
+        }
+        
         // Use the same API endpoint as dashboard with auth header
         const response = await axios.get('/api/resources', getAuthHeader());
-        setResources(response.data);
+        let filteredData = response.data;
+        
+        // Apply type filter from URL if present
+        if (typeParam && typeParam !== 'all') {
+          filteredData = response.data.filter(resource => resource.type === typeParam);
+        }
+        
+        setResources(filteredData);
         
         // Extract unique tags from resources
         const tags = new Set();
@@ -190,8 +222,8 @@ const Resources = () => {
         });
         
         setAvailableTags(Array.from(tags));
-      } catch (apiError) {
-        console.error('API call failed, trying mock endpoint:', apiError);
+      } catch (err) {
+        console.error('API call failed, trying mock endpoint:', err);
         
         try {
           // Try the mock endpoint
@@ -293,10 +325,14 @@ const Resources = () => {
   
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
-    setFilters({
+    const newFilters = {
       ...filters,
       [name]: value
-    });
+    };
+    setFilters(newFilters);
+    
+    // Update URL with new filters
+    updateUrlWithFilters(newFilters);
   };
   
   const toggleFilters = () => {
