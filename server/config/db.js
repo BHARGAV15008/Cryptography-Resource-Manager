@@ -152,6 +152,8 @@ const ensureEmailVerifiedExists = async () => {
 module.exports = {
   connectDB: initializeDatabase,
   getPool: () => pool,
+  pool: () => pool, 
+  getConnection: async () => await pool.getConnection(), 
   executeQuery,
   beginTransaction,
   commitTransaction,

@@ -1,0 +1,28 @@
+-- Events table for storing cryptography events
+CREATE TABLE IF NOT EXISTS events (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  short_description VARCHAR(255),
+  location VARCHAR(255),
+  is_online BOOLEAN DEFAULT FALSE,
+  startDate DATETIME NOT NULL,
+  endDate DATETIME NOT NULL,
+  start_datetime DATETIME GENERATED ALWAYS AS (startDate) STORED,
+  end_datetime DATETIME GENERATED ALWAYS AS (endDate) STORED,
+  timezone VARCHAR(50) DEFAULT 'UTC',
+  imageUrl VARCHAR(255),
+  image_url VARCHAR(255) GENERATED ALWAYS AS (imageUrl) STORED,
+  registration_url VARCHAR(255),
+  organizerName VARCHAR(255),
+  organizer_name VARCHAR(255) GENERATED ALWAYS AS (organizerName) STORED,
+  organizer_email VARCHAR(255),
+  eventType VARCHAR(100),
+  event_type VARCHAR(100) GENERATED ALWAYS AS (eventType) STORED,
+  is_featured BOOLEAN DEFAULT FALSE,
+  status ENUM('pending', 'approved', 'rejected', 'scheduled') DEFAULT 'pending',
+  created_by INT,
+  tags JSON,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);

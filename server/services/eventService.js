@@ -62,7 +62,7 @@ async function importExternalEvents(source, userId) {
       try {
         // Check if event already exists to avoid duplicates
         const existingEvents = await executeQuery(
-          `SELECT id FROM events WHERE title = ? AND start_datetime = ?`,
+          `SELECT id FROM events WHERE title = ? AND startDate = ?`,
           [event.title, new Date(event.startDate)]
         );
 
@@ -74,10 +74,10 @@ async function importExternalEvents(source, userId) {
         // Insert event into database with updated schema
         await executeQuery(
           `INSERT INTO events (
-            title, description, short_description, location, is_online, 
-            start_datetime, end_datetime, timezone, image_url, registration_url,
-            organizer_name, organizer_email, event_type, is_featured, status, 
-            created_by, created_at, updated_at, tags
+            title, description, shortDescription, location, isOnline, 
+            startDateTime, endDateTime, timezone, imageUrl, registrationUrl,
+            organizerName, organizerEmail, eventType, isFeatured, status, 
+            createdBy, createdAt, updatedAt, tags
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)`,
           [
             event.title,
@@ -150,60 +150,60 @@ async function importExternalEvents(source, userId) {
 async function createEvent(eventData, userId) {
   try {
     // Validate required fields
-    if (!eventData.title || !eventData.start_datetime) {
+    if (!eventData.title || !eventData.startDateTime) {
       throw new Error('शीर्षक और प्रारंभ तिथि आवश्यक हैं');
     }
 
     // Set end date to start date + 1 day if not provided
-    if (!eventData.end_datetime) {
-      eventData.end_datetime = addDays(parseISO(eventData.start_datetime), 1);
+    if (!eventData.endDateTime) {
+      eventData.endDateTime = addDays(parseISO(eventData.startDateTime), 1);
     }
 
     // Set default values for optional fields
     const data = {
       ...eventData,
-      short_description: eventData.short_description || (eventData.description ? (
+      shortDescription: eventData.shortDescription || (eventData.description ? (
         eventData.description.length > 200 ? 
         eventData.description.substring(0, 197) + '...' : 
         eventData.description
       ) : ''),
-      is_online: eventData.is_online || false,
+      isOnline: eventData.isOnline || false,
       timezone: eventData.timezone || 'UTC',
       status: eventData.status || 'draft',
-      is_featured: eventData.is_featured || false,
-      event_type: eventData.event_type || 'workshop',
-      created_by: userId,
+      isFeatured: eventData.isFeatured || false,
+      eventType: eventData.eventType || 'workshop',
+      createdBy: userId,
       tags: eventData.tags ? JSON.stringify(eventData.tags) : null
     };
 
     // Insert event into database
     const result = await executeQuery(
       `INSERT INTO events (
-        title, description, short_description, location, is_online, 
-        online_meeting_link, start_datetime, end_datetime, timezone, 
-        image_url, registration_url, capacity, organizer_name, 
-        organizer_email, event_type, is_featured, status, 
-        created_by, created_at, updated_at, tags
+        title, description, shortDescription, location, isOnline, 
+        onlineMeetingLink, startDateTime, endDateTime, timezone, 
+        imageUrl, registrationUrl, capacity, organizerName, 
+        organizerEmail, eventType, isFeatured, status, 
+        createdBy, createdAt, updatedAt, tags
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?)`,
       [
         data.title,
         data.description,
-        data.short_description,
+        data.shortDescription,
         data.location,
-        data.is_online,
-        data.online_meeting_link,
-        new Date(data.start_datetime),
-        new Date(data.end_datetime),
+        data.isOnline,
+        data.onlineMeetingLink,
+        new Date(data.startDateTime),
+        new Date(data.endDateTime),
         data.timezone,
-        data.image_url,
-        data.registration_url,
+        data.imageUrl,
+        data.registrationUrl,
         data.capacity,
-        data.organizer_name,
-        data.organizer_email,
-        data.event_type,
-        data.is_featured,
+        data.organizerName,
+        data.organizerEmail,
+        data.eventType,
+        data.isFeatured,
         data.status,
-        data.created_by,
+        data.createdBy,
         data.tags
       ]
     );
@@ -279,47 +279,47 @@ async function updateEvent(eventId, eventData, userId) {
       `UPDATE events SET
         title = ?,
         description = ?,
-        short_description = ?,
+        shortDescription = ?,
         location = ?,
-        is_online = ?,
-        online_meeting_link = ?,
-        start_datetime = ?,
-        end_datetime = ?,
+        isOnline = ?,
+        onlineMeetingLink = ?,
+        startDateTime = ?,
+        endDateTime = ?,
         timezone = ?,
-        image_url = ?,
-        registration_url = ?,
+        imageUrl = ?,
+        registrationUrl = ?,
         capacity = ?,
-        organizer_name = ?,
-        organizer_email = ?,
-        event_type = ?,
-        is_featured = ?,
+        organizerName = ?,
+        organizerEmail = ?,
+        eventType = ?,
+        isFeatured = ?,
         status = ?,
-        updated_at = NOW(),
+        updatedAt = NOW(),
         tags = ?
       WHERE id = ?`,
       [
         eventData.title || currentEvent.title,
         eventData.description || currentEvent.description,
-        eventData.short_description || (
+        eventData.shortDescription || (
           eventData.description ? 
             (eventData.description.length > 200 ? 
               eventData.description.substring(0, 197) + '...' : 
               eventData.description) : 
-            currentEvent.short_description
+            currentEvent.shortDescription
         ),
         eventData.location || currentEvent.location,
-        eventData.is_online !== undefined ? eventData.is_online : currentEvent.is_online,
-        eventData.online_meeting_link || currentEvent.online_meeting_link,
-        eventData.start_datetime ? new Date(eventData.start_datetime) : currentEvent.start_datetime,
-        eventData.end_datetime ? new Date(eventData.end_datetime) : currentEvent.end_datetime,
+        eventData.isOnline !== undefined ? eventData.isOnline : currentEvent.isOnline,
+        eventData.onlineMeetingLink || currentEvent.onlineMeetingLink,
+        eventData.startDateTime ? new Date(eventData.startDateTime) : currentEvent.startDateTime,
+        eventData.endDateTime ? new Date(eventData.endDateTime) : currentEvent.endDateTime,
         eventData.timezone || currentEvent.timezone,
-        eventData.image_url || currentEvent.image_url,
-        eventData.registration_url || currentEvent.registration_url,
+        eventData.imageUrl || currentEvent.imageUrl,
+        eventData.registrationUrl || currentEvent.registrationUrl,
         eventData.capacity !== undefined ? eventData.capacity : currentEvent.capacity,
-        eventData.organizer_name || currentEvent.organizer_name,
-        eventData.organizer_email || currentEvent.organizer_email,
-        eventData.event_type || currentEvent.event_type,
-        eventData.is_featured !== undefined ? eventData.is_featured : currentEvent.is_featured,
+        eventData.organizerName || currentEvent.organizerName,
+        eventData.organizerEmail || currentEvent.organizerEmail,
+        eventData.eventType || currentEvent.eventType,
+        eventData.isFeatured !== undefined ? eventData.isFeatured : currentEvent.isFeatured,
         eventData.status || currentEvent.status,
         tags,
         eventId
@@ -371,7 +371,7 @@ async function registerForEvent(eventId, userId) {
   try {
     // Check if event exists and has capacity
     const [event] = await executeQuery(
-      `SELECT id, title, capacity, registered_count, start_datetime 
+      `SELECT id, title, capacity, registeredCount, startDateTime 
        FROM events 
        WHERE id = ?`,
       [eventId]
@@ -385,7 +385,7 @@ async function registerForEvent(eventId, userId) {
     }
 
     // Check if event is in the past
-    if (new Date(event.start_datetime) < new Date()) {
+    if (new Date(event.startDateTime) < new Date()) {
       return {
         success: false,
         message: 'आप एक पुराने इवेंट के लिए पंजीकरण नहीं कर सकते'
@@ -393,7 +393,7 @@ async function registerForEvent(eventId, userId) {
     }
 
     // Check if event has reached capacity
-    if (event.capacity && event.registered_count >= event.capacity) {
+    if (event.capacity && event.registeredCount >= event.capacity) {
       return {
         success: false,
         message: 'इवेंट की क्षमता पूरी हो गई है'
@@ -403,7 +403,7 @@ async function registerForEvent(eventId, userId) {
     // Check if user is already registered
     const [existingRegistration] = await executeQuery(
       `SELECT id FROM event_registrations 
-       WHERE event_id = ? AND user_id = ?`,
+       WHERE eventId = ? AND userId = ?`,
       [eventId, userId]
     );
 
@@ -421,19 +421,19 @@ async function registerForEvent(eventId, userId) {
     const queries = [
       {
         sql: `INSERT INTO event_registrations 
-              (event_id, user_id, registration_date, status, qr_code)
+              (eventId, userId, registrationDate, status, qrCode)
               VALUES (?, ?, NOW(), 'registered', ?)`,
         params: [eventId, userId, qrCode]
       },
       {
         sql: `UPDATE events 
-              SET registered_count = registered_count + 1
+              SET registeredCount = registeredCount + 1
               WHERE id = ?`,
         params: [eventId]
       },
       {
         sql: `INSERT INTO notifications
-              (user_id, title, message, type, action_url, created_at)
+              (userId, title, message, type, actionUrl, createdAt)
               VALUES (?, ?, ?, ?, ?, NOW())`,
         params: [
           userId,
@@ -445,7 +445,7 @@ async function registerForEvent(eventId, userId) {
       },
       {
         sql: `INSERT INTO audit_logs 
-              (user_id, action_type, entity_type, entity_id, new_value, created_at)
+              (userId, actionType, entityType, entityId, new_value, created_at)
               VALUES (?, ?, ?, ?, ?, NOW())`,
         params: [
           userId, 
@@ -482,22 +482,22 @@ async function getEvents(filters = {}) {
   try {
     let query = `
       SELECT e.*, 
-        (SELECT COUNT(*) FROM event_registrations er WHERE er.event_id = e.id) as registration_count,
-        u.name as creator_name
+        (SELECT COUNT(*) FROM event_registrations er WHERE er.eventId = e.id) as registrationCount,
+        u.name as creatorName
       FROM events e
-      LEFT JOIN users u ON e.created_by = u.id
+      LEFT JOIN users u ON e.createdBy = u.id
       WHERE 1=1
     `;
     const params = [];
 
     // Apply filters
     if (filters.type) {
-      query += ` AND e.event_type = ?`;
+      query += ` AND e.eventType = ?`;
       params.push(filters.type);
     }
 
     if (filters.featured) {
-      query += ` AND e.is_featured = TRUE`;
+      query += ` AND e.isFeatured = TRUE`;
     }
 
     if (filters.status) {
@@ -506,11 +506,11 @@ async function getEvents(filters = {}) {
     }
 
     if (filters.upcoming) {
-      query += ` AND e.start_datetime >= NOW()`;
+      query += ` AND e.startDateTime >= NOW()`;
     }
 
     if (filters.past) {
-      query += ` AND e.end_datetime < NOW()`;
+      query += ` AND e.endDateTime < NOW()`;
     }
 
     if (filters.search) {
@@ -520,13 +520,13 @@ async function getEvents(filters = {}) {
 
     // Apply sorting
     if (filters.sort === 'date-asc') {
-      query += ` ORDER BY e.start_datetime ASC`;
+      query += ` ORDER BY e.startDateTime ASC`;
     } else if (filters.sort === 'date-desc') {
-      query += ` ORDER BY e.start_datetime DESC`;
+      query += ` ORDER BY e.startDateTime DESC`;
     } else if (filters.sort === 'popular') {
-      query += ` ORDER BY registration_count DESC`;
+      query += ` ORDER BY registrationCount DESC`;
     } else {
-      query += ` ORDER BY e.start_datetime ASC`;
+      query += ` ORDER BY e.startDateTime ASC`;
     }
 
     // Apply pagination
@@ -697,7 +697,7 @@ async function getCryptologyConferenceEvents() {
         url: 'https://pqcrypto2024.org',
         category: 'conference',
         organizerName: 'ETH Zurich',
-        imageUrl: 'https://pqcrypto2024.org/assets/images/logo.png'
+        imageUrl: '/images/placeholder-event.jpg'
       },
       {
         title: 'Workshop on Cryptographic Protocols and Zero-Knowledge Proofs',
@@ -719,7 +719,7 @@ async function getCryptologyConferenceEvents() {
         url: 'https://applied-crypto-school.fr',
         category: 'workshop',
         organizerName: 'CNRS & Sorbonne University',
-        imageUrl: 'https://applied-crypto-school.fr/logo.png'
+        imageUrl: '/images/placeholder-event.jpg'
       }
     ].map(event => convertExternalEvent(event, 'cryptologyconference'));
   } catch (error) {

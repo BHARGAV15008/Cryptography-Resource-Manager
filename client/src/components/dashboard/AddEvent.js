@@ -1,9 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { FaCalendarAlt, FaMapMarkerAlt, FaBuilding, FaTimes, FaUpload, FaImage } from 'react-icons/fa';
 import axios from 'axios';
 
-const AddEvent = ({ onClose, onEventAdded }) => {
+const AddEvent = ({ onClose, onEventAdded, onEventUpdated, isEditing = false, eventToEdit = null }) => {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -20,6 +20,33 @@ const AddEvent = ({ onClose, onEventAdded }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
+
+  // Load event data if editing
+  useEffect(() => {
+    if (isEditing && eventToEdit) {
+      // Format dates for input fields (YYYY-MM-DDTHH:MM)
+      const formatDateForInput = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toISOString().slice(0, 16);
+      };
+
+      setFormData({
+        title: eventToEdit.title || '',
+        description: eventToEdit.description || '',
+        startDate: formatDateForInput(eventToEdit.startDate),
+        endDate: formatDateForInput(eventToEdit.endDate),
+        location: eventToEdit.location || '',
+        organizerName: eventToEdit.organizerName || '',
+        eventType: eventToEdit.eventType || 'workshop',
+        imageUrl: eventToEdit.imageUrl || '',
+      });
+
+      if (eventToEdit.imageUrl) {
+        setPreviewUrl(eventToEdit.imageUrl);
+      }
+    }
+  }, [isEditing, eventToEdit]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -55,7 +82,7 @@ const AddEvent = ({ onClose, onEventAdded }) => {
         imageData.append('image', selectedImage);
 
         // Upload image first
-        const uploadResponse = await axios.post('http://0.0.0.0:5001/api/upload', imageData, {
+        const uploadResponse = await axios.post('/api/upload', imageData, {
           headers: {
             'Content-Type': 'multipart/form-data'
           }
@@ -70,11 +97,43 @@ const AddEvent = ({ onClose, onEventAdded }) => {
         imageUrl
       };
 
-      const response = await axios.post('http://0.0.0.0:5001/api/events', eventData);
-      onEventAdded(response.data);
-      onClose();
+      console.log('Submitting event data:', eventData);
+
+      // Make sure we're using the correct server URL (port 5001)
+      const API_BASE_URL = 'http://localhost:5001';
+
+      try {
+        if (isEditing && eventToEdit && eventToEdit.id) {
+          console.log(`Updating event with ID: ${eventToEdit.id}`);
+          console.log('Event data being sent:', eventData);
+          
+          // Add the authorization header for protected routes
+          const token = localStorage.getItem('token');
+          const headers = token ? { Authorization: `Bearer ${token}` } : {};
+          
+          const response = await axios.put(
+            `${API_BASE_URL}/api/events/${eventToEdit.id}`, 
+            eventData,
+            { headers }
+          );
+          
+          console.log('Event updated successfully:', response.data);
+          onEventUpdated(response.data);
+        } else {
+          console.log('Creating new event');
+          const response = await axios.post(`${API_BASE_URL}/api/events`, eventData);
+          console.log('Event created successfully:', response.data);
+          onEventAdded(response.data);
+        }
+        onClose();
+      } catch (apiError) {
+        console.error('API error:', apiError);
+        const errorMessage = apiError.response?.data?.error || apiError.response?.data?.message || apiError.message || 'Failed to create event';
+        setError(errorMessage);
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to create event');
+      console.error('Error in form submission:', err);
+      setError('Failed to process form: ' + (err.message || 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -84,7 +143,7 @@ const AddEvent = ({ onClose, onEventAdded }) => {
     <Modal>
       <ModalContent>
         <ModalHeader>
-          <h2>Add New Event</h2>
+          <h2>{isEditing ? 'Edit Event' : 'Add New Event'}</h2>
           <CloseButton onClick={onClose}>
             <FaTimes />
           </CloseButton>
@@ -226,7 +285,7 @@ const AddEvent = ({ onClose, onEventAdded }) => {
               Cancel
             </CancelButton>
             <SubmitButton type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating...' : 'Create Event'}
+              {isSubmitting ? (isEditing ? 'Updating...' : 'Creating...') : (isEditing ? 'Update Event' : 'Create Event')}
             </SubmitButton>
           </ButtonGroup>
         </Form>

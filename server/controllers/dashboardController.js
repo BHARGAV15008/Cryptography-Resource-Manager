@@ -70,8 +70,8 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
     const eventStats = await executeQuery(`
       SELECT 
         COUNT(*) as total,
-        SUM(CASE WHEN start_datetime > NOW() THEN 1 ELSE 0 END) as upcoming,
-        SUM(CASE WHEN DATE(start_datetime) = CURDATE() THEN 1 ELSE 0 END) as today
+        SUM(CASE WHEN startDate > NOW() THEN 1 ELSE 0 END) as upcoming,
+        SUM(CASE WHEN DATE(startDate) = CURDATE() THEN 1 ELSE 0 END) as today
       FROM events
     `);
 
@@ -107,11 +107,11 @@ const getDashboardSummary = asyncHandler(async (req, res) => {
       ) u ON DATE_FORMAT(m.month, '%Y-%m') = u.month
       LEFT JOIN (
         SELECT 
-          DATE_FORMAT(start_datetime, '%Y-%m') as month,
+          DATE_FORMAT(startDate, '%Y-%m') as month,
           COUNT(*) as events
         FROM events
-        WHERE start_datetime >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-        GROUP BY DATE_FORMAT(start_datetime, '%Y-%m')
+        WHERE startDate >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+        GROUP BY DATE_FORMAT(startDate, '%Y-%m')
       ) e ON DATE_FORMAT(m.month, '%Y-%m') = e.month
       ORDER BY m.month ASC
     `);
@@ -371,11 +371,11 @@ const getContentStats = asyncHandler(async (req, res) => {
     // Get event stats by month
     const eventsByMonth = await executeQuery(`
       SELECT 
-        DATE_FORMAT(start_datetime, '%Y-%m') as month,
+        DATE_FORMAT(startDate, '%Y-%m') as month,
         COUNT(*) as count
       FROM events
-      WHERE start_datetime >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
-      GROUP BY DATE_FORMAT(start_datetime, '%Y-%m')
+      WHERE startDate >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+      GROUP BY DATE_FORMAT(startDate, '%Y-%m')
       ORDER BY month ASC
     `);
 

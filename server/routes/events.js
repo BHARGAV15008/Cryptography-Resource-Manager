@@ -1,7 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { getExternalEvents } = require('../services/eventService');
-const { pool } = require('../config/db');
+const db = require('../config/db');
+
+// Helper function to get a database connection
+const getConnection = async () => {
+  return await db.getConnection();
+};
 
 /**
  * @route GET /api/events
@@ -10,20 +15,21 @@ const { pool } = require('../config/db');
  */
 router.get('/', async (req, res) => {
   try {
+    console.log('GET /api/events - Fetching all events');
     const {
       source,
       category,
       search,
       startDate,
       featured,
-      limit = 10,
-      page = 1
+      page = 1,
+      limit = 10
     } = req.query;
-
-    // Get events from database
+    
     let dbEvents = [];
+    
     try {
-      const connection = await pool.getConnection();
+      const connection = await getConnection();
       
       // Build query dynamically based on filters
       let query = 'SELECT * FROM events WHERE 1=1';
@@ -43,7 +49,7 @@ router.get('/', async (req, res) => {
       }
       
       if (category) {
-        query += ' AND category = ?';
+        query += ' AND eventType = ?';
         params.push(category);
       }
       
@@ -54,7 +60,7 @@ router.get('/', async (req, res) => {
       }
       
       if (startDate) {
-        query += ' AND start_datetime >= ?';
+        query += ' AND startDate >= ?';
         params.push(new Date(startDate));
       }
       
@@ -63,45 +69,50 @@ router.get('/', async (req, res) => {
         params.push(featured === 'true' ? 1 : 0);
       }
       
-      // Filter for cryptography/cryptology events only
-      query += ' AND (title LIKE ? OR description LIKE ? OR title LIKE ? OR description LIKE ? OR title LIKE ? OR description LIKE ?)';
-      params.push('%cryptography%', '%cryptography%', '%cryptology%', '%cryptology%', '%cryptanalysis%', '%cryptanalysis%');
-      
-      // Add status filtering - only show approved events
-      query += ' AND status = ?';
-      params.push('approved');
-      
+      // Simplified query - remove complex filters that might cause issues
       // Add sorting
-      query += ' ORDER BY start_datetime ASC';
+      query += ' ORDER BY startDate ASC';
       
-      // Add pagination
+      // Add pagination - using direct values instead of parameters for LIMIT and OFFSET
+      // This avoids the 'Incorrect arguments to mysqld_stmt_execute' error
       const offset = (page - 1) * limit;
-      query += ' LIMIT ? OFFSET ?';
-      params.push(parseInt(limit), offset);
+      query += ` LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
+      
+      console.log('Executing query:', query);
+      console.log('With params:', params);
       
       const [rows] = await connection.execute(query, params);
       connection.release();
+      
+      console.log(`Found ${rows.length} events in database`);
       
       // Transform database results to match our schema
       dbEvents = rows.map(row => ({
         id: row.id,
         title: row.title,
-        description: row.description,
-        startDate: row.start_datetime,
-        endDate: row.end_datetime || new Date(new Date(row.start_datetime).getTime() + 86400000), // Default to next day
+        description: row.description || null,
+        startDate: row.startDate,
+        endDate: row.endDate || new Date(new Date(row.startDate).getTime() + 86400000), // Default to next day
         location: row.location || 'Online',
-        imageUrl: row.image_url || '',
-        category: row.category || 'conference',
+        imageUrl: row.imageUrl || '/images/placeholder-event.jpg',
+        eventType: row.eventType || 'conference',
         source: row.source || 'college',
-        organizerName: row.organizer_name || '',
-        organizerImageUrl: '',
-        registrationUrl: row.registration_link || '',
+        organizerName: row.organizerName || '',
+        organizerEmail: row.organizer_email || null,
+        registrationUrl: row.registration_url || null,
         isFeatured: row.is_featured === 1,
-        approved: row.status === 'approved'
+        status: row.status || 'pending'
       }));
+      
+      console.log(`Transformed ${dbEvents.length} events for response`);
+      
+      // If we got events from the database, return them directly
+      if (dbEvents.length > 0) {
+        return res.json(dbEvents);
+      }
     } catch (dbError) {
       console.error('Database error:', dbError.message);
-      // If database fails, proceed with external events only
+      console.error('Database error stack:', dbError.stack);
     }
     
     // Get events from external sources if not specifically requesting DB events
@@ -162,8 +173,8 @@ router.get('/', async (req, res) => {
     
     res.json(paginatedEvents);
   } catch (error) {
-    console.error('Error fetching events:', error.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in GET /api/events:', error);
+    res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
 
@@ -178,7 +189,7 @@ router.get('/:id', async (req, res) => {
     
     // Handle numeric IDs (database) differently from string IDs (external)
     if (!isNaN(id)) {
-      const connection = await pool.getConnection();
+      const connection = await getConnection();
       const [rows] = await connection.execute(
         'SELECT * FROM events WHERE id = ?', 
         [id]
@@ -194,17 +205,18 @@ router.get('/:id', async (req, res) => {
         id: row.id,
         title: row.title,
         description: row.description,
-        startDate: row.start_datetime,
-        endDate: row.end_datetime,
+        startDate: row.startDate,
+        endDate: row.endDate,
         location: row.location,
-        imageUrl: row.image_url || '',
-        category: row.category,
+        imageUrl: row.imageUrl || '/images/placeholder-event.jpg',
+        category: row.eventType,
         source: row.source,
-        organizerName: row.organizer_name || '',
+        organizerName: row.organizerName || '',
+        organizerEmail: row.organizer_email || '',
         organizerImageUrl: '',
-        registrationUrl: row.registration_link || '',
+        registrationUrl: row.registration_url || '',
         isFeatured: row.is_featured === 1,
-        approved: row.status === 'approved'
+        status: row.status
       };
       
       return res.json(event);
@@ -214,241 +226,290 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: 'External event details not available' });
     }
   } catch (error) {
-    console.error('Error fetching event:', error.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in GET /api/events/:id:', error);
+    res.status(500).json({ error: 'Failed to fetch event' });
   }
 });
 
 /**
  * @route POST /api/events
  * @desc Create a new event
- * @access Private
+ * @access Private (Admin only)
  */
 router.post('/', async (req, res) => {
   try {
-    // Extract event data from request body
+    console.log('POST /api/events - Creating new event');
     const {
       title,
       description,
       startDate,
       endDate,
       location,
-      imageUrl,
-      category,
-      registrationUrl,
-      organizerName
+      organizerName,
+      organizerEmail,
+      eventType,
+      imageUrl
     } = req.body;
-    
+
     // Validate required fields
-    if (!title || !description || !startDate || !category) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    if (!title) {
+      return res.status(400).json({ error: 'Title is required' });
     }
+
+    if (!startDate) {
+      return res.status(400).json({ error: 'Start date is required' });
+    }
+
+    // Format dates
+    const formattedStartDate = new Date(startDate);
+    const formattedEndDate = endDate ? new Date(endDate) : new Date(formattedStartDate.getTime() + 24 * 60 * 60 * 1000);
+
+    console.log('Creating event with data:', {
+      title,
+      description: description || null,
+      startDate: formattedStartDate,
+      endDate: formattedEndDate,
+      location: location || null,
+      organizerName: organizerName || null,
+      organizerEmail: organizerEmail || null,
+      eventType: eventType || 'conference',
+      imageUrl: imageUrl || null
+    });
+
+    const connection = await getConnection();
     
-    // Format dates for MySQL
-    const formattedStartDate = new Date(startDate).toISOString().slice(0, 19).replace('T', ' ');
-    const formattedEndDate = endDate ? new Date(endDate).toISOString().slice(0, 19).replace('T', ' ') : null;
-    
-    const connection = await pool.getConnection();
-    
-    // Insert the event
+    // Insert the new event
     const [result] = await connection.execute(
       `INSERT INTO events (
-        title, description, start_datetime, end_datetime, 
-        location, image_url, source, registration_link, 
-        category, organizer_name, status, tags
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
         title, 
         description, 
-        formattedStartDate, 
-        formattedEndDate, 
-        location || 'Online', 
-        imageUrl || '', 
-        'college', // Default source for user-submitted events
-        registrationUrl || '',
-        category,
-        organizerName || '',
-        'pending', // New events require approval
-        JSON.stringify(['cryptography', 'cryptology']) // Default tags
+        startDate, 
+        endDate, 
+        location, 
+        organizerName, 
+        eventType, 
+        imageUrl, 
+        status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        title,
+        description || null,
+        formattedStartDate,
+        formattedEndDate,
+        location || null,
+        organizerName || null,
+        eventType || 'conference',
+        imageUrl || null,
+        'pending'
       ]
     );
     
     connection.release();
     
+    // Get the newly created event
+    const eventId = result.insertId;
+    
     // Return the created event
-    res.status(201).json({
-      id: result.insertId,
+    const newEvent = {
+      id: eventId,
       title,
-      description,
+      description: description || null,
       startDate,
       endDate,
-      location,
-      imageUrl,
-      category,
+      location: location || null,
+      organizerName: organizerName || null,
+      organizerEmail: organizerEmail || null,
+      eventType: eventType || 'conference',
+      imageUrl: imageUrl || null,
       source: 'college',
-      organizerName,
-      organizerImageUrl: '',
-      registrationUrl,
-      isFeatured: false,
-      approved: false
-    });
+      status: 'pending'
+    };
+    
+    console.log('Created new event:', newEvent);
+    res.status(201).json(newEvent);
   } catch (error) {
-    console.error('Error creating event:', error.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in POST /api/events:', error);
+    res.status(500).json({ error: 'Failed to create event' });
   }
 });
 
 /**
  * @route PUT /api/events/:id
- * @desc Update an event
- * @access Private
+ * @desc Update an existing event
+ * @access Private (Admin only)
  */
 router.put('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
+    console.log('PUT /api/events/:id - Updating event');
+    const id = req.params.id;
     const {
       title,
       description,
       startDate,
       endDate,
       location,
-      imageUrl,
-      category,
-      registrationUrl,
       organizerName,
-      isFeatured,
-      approved
+      organizerEmail,
+      eventType,
+      imageUrl
     } = req.body;
     
-    // Format dates for MySQL
-    const formattedStartDate = startDate ? new Date(startDate).toISOString().slice(0, 19).replace('T', ' ') : null;
-    const formattedEndDate = endDate ? new Date(endDate).toISOString().slice(0, 19).replace('T', ' ') : null;
-    
-    // Build dynamic query based on provided fields
-    let query = 'UPDATE events SET ';
-    const params = [];
-    const updates = [];
-    
-    if (title) {
-      updates.push('title = ?');
-      params.push(title);
+    console.log('Request body:', req.body);
+    console.log('Event ID:', id);
+
+    // Validate required fields
+    if (!title || !startDate) {
+      return res.status(400).json({ message: 'Title and start date are required' });
     }
+
+    // Format dates in MySQL compatible format (YYYY-MM-DD HH:MM:SS)
+    const formatDate = (dateString) => {
+      if (!dateString) return null;
+      const date = new Date(dateString);
+      return date.toISOString().slice(0, 19).replace('T', ' ');
+    };
+
+    const formattedStartDate = formatDate(startDate);
+    const formattedEndDate = formatDate(endDate);
+
+    const connection = await getConnection();
     
-    if (description) {
-      updates.push('description = ?');
-      params.push(description);
-    }
-    
-    if (formattedStartDate) {
-      updates.push('start_datetime = ?');
-      params.push(formattedStartDate);
-    }
-    
-    if (formattedEndDate) {
-      updates.push('end_datetime = ?');
-      params.push(formattedEndDate);
-    }
-    
-    if (location) {
-      updates.push('location = ?');
-      params.push(location);
-    }
-    
-    if (imageUrl) {
-      updates.push('image_url = ?');
-      params.push(imageUrl);
-    }
-    
-    if (category) {
-      updates.push('category = ?');
-      params.push(category);
-    }
-    
-    if (registrationUrl) {
-      updates.push('registration_link = ?');
-      params.push(registrationUrl);
-    }
-    
-    if (organizerName) {
-      updates.push('organizer_name = ?');
-      params.push(organizerName);
-    }
-    
-    if (isFeatured !== undefined) {
-      updates.push('is_featured = ?');
-      params.push(isFeatured ? 1 : 0);
-    }
-    
-    if (approved !== undefined) {
-      updates.push('status = ?');
-      params.push(approved ? 'approved' : 'pending');
-    }
-    
-    if (updates.length === 0) {
-      return res.status(400).json({ message: 'No fields to update' });
-    }
-    
-    query += updates.join(', ');
-    query += ' WHERE id = ?';
-    params.push(id);
-    
-    const connection = await pool.getConnection();
-    await connection.execute(query, params);
-    
-    // Fetch the updated event
-    const [rows] = await connection.execute('SELECT * FROM events WHERE id = ?', [id]);
-    connection.release();
+    // Check if event exists
+    const [rows] = await connection.execute(
+      'SELECT * FROM events WHERE id = ?',
+      [id]
+    );
     
     if (rows.length === 0) {
+      connection.release();
       return res.status(404).json({ message: 'Event not found' });
     }
     
-    const row = rows[0];
-    const event = {
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      startDate: row.start_datetime,
-      endDate: row.end_datetime,
-      location: row.location,
-      imageUrl: row.image_url || '',
-      category: row.category,
-      source: row.source,
-      organizerName: row.organizer_name || '',
-      organizerImageUrl: '',
-      registrationUrl: row.registration_link || '',
-      isFeatured: row.is_featured === 1,
-      approved: row.status === 'approved'
+    // Update the event
+    // Convert any undefined values to null before passing to the query
+    const params = [
+      title || null,
+      description || null,
+      formattedStartDate,
+      formattedEndDate,
+      location || null,
+      organizerName || null,
+      organizerEmail || null,  // Using organizerEmail (camelCase) to match the variable name
+      eventType || null,
+      imageUrl || null,
+      id
+    ];
+    
+    console.log('Updating event with params:', params);
+    
+    try {
+      // Remove organizer_email from the query since it doesn't exist in the database
+      const updateQuery = `UPDATE events SET
+        title = ?, 
+        description = ?, 
+        startDate = ?, 
+        endDate = ?, 
+        location = ?, 
+        organizerName = ?, 
+        eventType = ?, 
+        imageUrl = ?
+      WHERE id = ?`;
+      
+      console.log('Update query:', updateQuery);
+      
+      // Remove organizerEmail from params
+      const updatedParams = [
+        title || null,
+        description || null,
+        formattedStartDate,
+        formattedEndDate,
+        location || null,
+        organizerName || null,
+        eventType || null,
+        imageUrl || null,
+        id
+      ];
+      
+      console.log('Updated params:', updatedParams);
+      
+      await connection.execute(updateQuery, updatedParams);
+    } catch (updateError) {
+      console.error('Error executing update query:', updateError);
+      throw updateError;
+    }
+    
+    connection.release();
+    
+    // Fetch the updated event from the database to ensure we return the correct data
+    const [updatedRows] = await connection.execute(
+      'SELECT * FROM events WHERE id = ?',
+      [id]
+    );
+    
+    if (updatedRows.length === 0) {
+      return res.status(404).json({ message: 'Event not found after update' });
+    }
+    
+    // Transform the database row to match the expected response format
+    const updatedEvent = {
+      id: parseInt(id),
+      title: updatedRows[0].title,
+      description: updatedRows[0].description,
+      startDate: updatedRows[0].startDate,
+      endDate: updatedRows[0].endDate,
+      location: updatedRows[0].location,
+      organizerName: updatedRows[0].organizerName,
+      organizerEmail: updatedRows[0].organizerEmail,
+      eventType: updatedRows[0].eventType,
+      imageUrl: updatedRows[0].imageUrl,
+      source: updatedRows[0].source,
+      status: updatedRows[0].status
     };
     
-    res.json(event);
+    console.log('Returning updated event:', updatedEvent);
+    res.json(updatedEvent);
   } catch (error) {
-    console.error('Error updating event:', error.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in PUT /api/events/:id:', error);
+    res.status(500).json({ error: 'Failed to update event' });
   }
 });
 
 /**
  * @route DELETE /api/events/:id
  * @desc Delete an event
- * @access Private
+ * @access Private (Admin only)
  */
 router.delete('/:id', async (req, res) => {
   try {
+    console.log('DELETE /api/events/:id - Deleting event');
     const { id } = req.params;
     
-    const connection = await pool.getConnection();
-    const [result] = await connection.execute('DELETE FROM events WHERE id = ?', [id]);
-    connection.release();
+    const connection = await getConnection();
     
-    if (result.affectedRows === 0) {
+    // Check if event exists
+    const [rows] = await connection.execute(
+      'SELECT * FROM events WHERE id = ?',
+      [id]
+    );
+    
+    if (rows.length === 0) {
+      connection.release();
       return res.status(404).json({ message: 'Event not found' });
     }
     
+    // Delete the event
+    await connection.execute(
+      'DELETE FROM events WHERE id = ?',
+      [id]
+    );
+    
+    connection.release();
+    
+    console.log('Deleted event:', id);
     res.json({ message: 'Event deleted successfully' });
   } catch (error) {
-    console.error('Error deleting event:', error.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in DELETE /api/events/:id:', error);
+    res.status(500).json({ error: 'Failed to delete event' });
   }
 });
 
@@ -459,9 +520,10 @@ router.delete('/:id', async (req, res) => {
  */
 router.post('/:id/approve', async (req, res) => {
   try {
+    console.log('POST /api/events/:id/approve - Approving event');
     const { id } = req.params;
     
-    const connection = await pool.getConnection();
+    const connection = await getConnection();
     const [result] = await connection.execute(
       'UPDATE events SET status = ? WHERE id = ?', 
       ['approved', id]
@@ -481,23 +543,25 @@ router.post('/:id/approve', async (req, res) => {
       id: row.id,
       title: row.title,
       description: row.description,
-      startDate: row.start_datetime,
-      endDate: row.end_datetime,
+      startDate: row.startDate,
+      endDate: row.endDate,
       location: row.location,
-      imageUrl: row.image_url || '',
-      category: row.category,
+      imageUrl: row.imageUrl || '/images/placeholder-event.jpg',
+      category: row.eventType,
       source: row.source,
-      organizerName: row.organizer_name || '',
+      organizerName: row.organizerName || '',
+      organizerEmail: row.organizer_email || '',
       organizerImageUrl: '',
-      registrationUrl: row.registration_link || '',
+      registrationUrl: row.registration_url || '',
       isFeatured: row.is_featured === 1,
-      approved: true
+      status: row.status
     };
     
+    console.log('Approved event:', event);
     res.json(event);
   } catch (error) {
-    console.error('Error approving event:', error.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error in POST /api/events/:id/approve:', error);
+    res.status(500).json({ error: 'Failed to approve event' });
   }
 });
 
