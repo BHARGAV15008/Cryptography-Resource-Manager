@@ -24,12 +24,9 @@ import { useAuth } from '../context/AuthContext';
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [resourcesDropdownOpen, setResourcesDropdownOpen] = useState(false);
   const { user } = useAuth();
   const location = useLocation();
   
-  const resourcesRef = useRef(null);
-
   // Handle scroll effect for navbar
   useEffect(() => {
     const handleScroll = () => {
@@ -45,20 +42,6 @@ const Navbar = () => {
       window.removeEventListener('scroll', handleScroll);
     };
   }, []);
-  
-  // Close dropdowns when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (resourcesRef.current && !resourcesRef.current.contains(event.target)) {
-        setResourcesDropdownOpen(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
 
   const toggleMenu = () => {
     setIsOpen(!isOpen);
@@ -66,11 +49,6 @@ const Navbar = () => {
 
   const isActive = (path) => {
     return location.pathname === path;
-  };
-  
-  const toggleResourcesDropdown = (e) => {
-    e.preventDefault();
-    setResourcesDropdownOpen(!resourcesDropdownOpen);
   };
 
   return (
@@ -103,34 +81,11 @@ const Navbar = () => {
               </NavLink>
             </NavItem>
             
-            <NavItem ref={resourcesRef} $active={location.pathname.includes('/resources')}>
-              <DropdownToggle 
-                onClick={toggleResourcesDropdown}
-                $isOpen={resourcesDropdownOpen}
-              >
+            <NavItem $active={location.pathname.includes('/resources')}>
+              <NavLink to="/resources" onClick={() => setIsOpen(false)}>
                 <FaBook />
                 <span>Resources</span>
-                <FaChevronDown />
-              </DropdownToggle>
-              
-              <DropdownMenu $isOpen={resourcesDropdownOpen}>
-                <DropdownItem to="/resources/videos" onClick={() => setIsOpen(false)}>
-                  <FaVideo />
-                  <span>Videos</span>
-                </DropdownItem>
-                <DropdownItem to="/resources/notes" onClick={() => setIsOpen(false)}>
-                  <FaFilePdf />
-                  <span>Notes (PDF/PPT)</span>
-                </DropdownItem>
-                <DropdownItem to="/resources/books" onClick={() => setIsOpen(false)}>
-                  <FaBookOpen />
-                  <span>Reference Books</span>
-                </DropdownItem>
-                <DropdownItem to="/resources/citations" onClick={() => setIsOpen(false)}>
-                  <FaQuoteRight />
-                  <span>Citations</span>
-                </DropdownItem>
-              </DropdownMenu>
+              </NavLink>
             </NavItem>
             
             <NavItem $active={isActive('/articles')}>
