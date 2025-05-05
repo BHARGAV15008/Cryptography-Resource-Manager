@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
-import { FaBook, FaVideo, FaPlus, FaEdit, FaTrash, FaExclamationCircle } from 'react-icons/fa';
+import { FaBook, FaVideo, FaPlus, FaEdit, FaTrash, FaExclamationCircle, FaSync } from 'react-icons/fa';
 import axios from 'axios';
 import AddCourse from './AddCourse';
 import AddLecture from './AddLecture';
@@ -19,145 +19,93 @@ const DashboardLectures = () => {
   // Function to get auth header for API requests
   const getAuthHeader = () => {
     const token = localStorage.getItem('token');
-    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+    return token ? { headers: { 'x-auth-token': token } } : {};
   };
   
-  useEffect(() => {
-    const fetchData = async () => {
+  // DIRECT DATABASE ACCESS - NO MOCK DATA
+  const fetchDataFromDatabase = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const API_BASE_URL = 'http://localhost:5001';
+      
+      // Always fetch courses data for reference (needed for both tabs)
       try {
-        setLoading(true);
-        setError(null);
+        console.log('DIRECT DATABASE FETCH: Getting courses from MySQL database...');
         
-        const API_BASE_URL = 'http://localhost:5001';
+        // Make a direct database request without custom headers to avoid CORS issues
+        const coursesResponse = await axios.get(`${API_BASE_URL}/api/courses`, {
+          params: { timestamp: new Date().getTime() }
+        });
         
-        if (activeTab === 'courses') {
-          try {
-            const response = await axios.get(`${API_BASE_URL}/api/courses`, getAuthHeader());
-            setCourses(response.data.length > 0 ? response.data : [
-              { 
-                id: 1, 
-                title: 'Introduction to Cryptography', 
-                code: 'CRYPT101', 
-                description: 'An introductory course to cryptography concepts',
-                semester: 'Fall',
-                year: 2023,
-                professor_name: 'Dr. Smith'
-              },
-              { 
-                id: 2, 
-                title: 'Advanced Encryption', 
-                code: 'CRYPT201', 
-                description: 'Advanced topics in modern encryption techniques',
-                semester: 'Spring',
-                year: 2023,
-                professor_name: 'Dr. Johnson'
-              }
-            ]);
-          } catch (err) {
-            console.error('Error fetching courses:', err);
-            // Set dummy data if API fails
-            setCourses([
-              { 
-                id: 1, 
-                title: 'Introduction to Cryptography', 
-                code: 'CRYPT101', 
-                description: 'An introductory course to cryptography concepts',
-                semester: 'Fall',
-                year: 2023,
-                professor_name: 'Dr. Smith'
-              },
-              { 
-                id: 2, 
-                title: 'Advanced Encryption', 
-                code: 'CRYPT201', 
-                description: 'Advanced topics in modern encryption techniques',
-                semester: 'Spring',
-                year: 2023,
-                professor_name: 'Dr. Johnson'
-              }
-            ]);
-          }
-        } else {
-          try {
-            const response = await axios.get(`${API_BASE_URL}/api/lectures`, getAuthHeader());
-            setLectures(response.data.length > 0 ? response.data : [
-              {
-                id: 1,
-                title: 'Symmetric Key Cryptography',
-                description: 'Introduction to symmetric key algorithms',
-                course_id: 1,
-                course_title: 'Introduction to Cryptography',
-                lecture_date: '2023-09-15',
-                slides_url: 'https://example.com/slides1.pdf',
-                video_url: 'https://example.com/video1.mp4'
-              },
-              {
-                id: 2,
-                title: 'Public Key Infrastructure',
-                description: 'Understanding PKI and its applications',
-                course_id: 2,
-                course_title: 'Advanced Encryption',
-                lecture_date: '2023-10-20',
-                slides_url: 'https://example.com/slides2.pdf',
-                video_url: 'https://example.com/video2.mp4'
-              }
-            ]);
-          } catch (err) {
-            console.error('Error fetching lectures:', err);
-            // Set dummy data if API fails
-            setLectures([
-              {
-                id: 1,
-                title: 'Symmetric Key Cryptography',
-                description: 'Introduction to symmetric key algorithms',
-                course_id: 1,
-                course_title: 'Introduction to Cryptography',
-                lecture_date: '2023-09-15',
-                slides_url: 'https://example.com/slides1.pdf',
-                video_url: 'https://example.com/video1.mp4'
-              },
-              {
-                id: 2,
-                title: 'Public Key Infrastructure',
-                description: 'Understanding PKI and its applications',
-                course_id: 2,
-                course_title: 'Advanced Encryption',
-                lecture_date: '2023-10-20',
-                slides_url: 'https://example.com/slides2.pdf',
-                video_url: 'https://example.com/video2.mp4'
-              }
-            ]);
-          }
-        }
+        console.log('DATABASE RESPONSE (COURSES):', coursesResponse.data);
+        
+        // Set courses directly from database response
+        setCourses(coursesResponse.data);
       } catch (err) {
-        console.error(`Error fetching ${activeTab}:`, err);
-        setError(`Failed to load ${activeTab}. Please try again later.`);
-      } finally {
-        setLoading(false);
+        console.error('DATABASE ERROR fetching courses:', err);
+        if (activeTab === 'courses') {
+          setError('Failed to load courses from database. Please try again.');
+        }
+        setCourses([]);
       }
-    };
-    
-    fetchData();
+      
+      // If on lectures tab, also fetch lectures data
+      if (activeTab === 'lectures') {
+        try {
+          console.log('DIRECT DATABASE FETCH: Getting lectures from MySQL database...');
+          
+          // Make a direct database request without custom headers to avoid CORS issues
+          const lecturesResponse = await axios.get(`${API_BASE_URL}/api/lectures`, {
+            params: { timestamp: new Date().getTime() }
+          });
+          
+          console.log('DATABASE RESPONSE (LECTURES):', lecturesResponse.data);
+          
+          // Set lectures directly from database response
+          setLectures(lecturesResponse.data);
+        } catch (err) {
+          console.error('DATABASE ERROR fetching lectures:', err);
+          setError('Failed to load lectures from database. Please try again.');
+          setLectures([]);
+        }
+      }
+    } catch (err) {
+      console.error(`GENERAL DATABASE ERROR:`, err);
+      setError(`Database connection error. Please try again later.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Initial data fetch on component mount and tab change
+  useEffect(() => {
+    fetchDataFromDatabase();
   }, [activeTab]);
   
   const handleCourseAdded = (newCourse) => {
-    setCourses(prev => [...prev, newCourse]);
+    console.log('Course added to database, refreshing data...');
+    // Refresh data directly from database instead of updating state locally
+    fetchDataFromDatabase();
   };
   
   const handleLectureAdded = (newLecture) => {
-    setLectures(prev => [...prev, newLecture]);
+    console.log('Lecture added to database, refreshing data...');
+    // Refresh data directly from database instead of updating state locally
+    fetchDataFromDatabase();
   };
 
   const handleCourseUpdated = (updatedCourse) => {
-    setCourses(prev => prev.map(course => 
-      course.id === updatedCourse.id ? updatedCourse : course
-    ));
+    console.log('Course updated in database, refreshing data...');
+    // Refresh data directly from database instead of updating state locally
+    fetchDataFromDatabase();
   };
   
   const handleLectureUpdated = (updatedLecture) => {
-    setLectures(prev => prev.map(lecture => 
-      lecture.id === updatedLecture.id ? updatedLecture : lecture
-    ));
+    console.log('Lecture updated in database, refreshing data...');
+    // Refresh data directly from database instead of updating state locally
+    fetchDataFromDatabase();
   };
   
   const handleEditCourse = (course) => {
@@ -174,11 +122,27 @@ const DashboardLectures = () => {
     if (window.confirm('Are you sure you want to delete this course? This will also delete all associated lectures.')) {
       try {
         const API_BASE_URL = 'http://localhost:5001';
-        await axios.delete(`${API_BASE_URL}/api/courses/${courseId}`, getAuthHeader());
-        setCourses(prev => prev.filter(course => course.id !== courseId));
+        console.log(`DIRECT DATABASE DELETE: Deleting course with ID: ${courseId}`);
+        
+        // Make the delete request to the server with no caching
+        const response = await axios.delete(`${API_BASE_URL}/api/courses/${courseId}`, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'x-auth-token': localStorage.getItem('token') || ''
+          }
+        });
+        
+        console.log('DATABASE DELETE RESPONSE:', response.data);
+        
+        // Always refresh from database after deletion
+        fetchDataFromDatabase();
+        
+        alert('Course deleted successfully. Refreshing data from database.');
       } catch (err) {
-        console.error('Error deleting course:', err);
-        alert('Failed to delete course. Please try again later.');
+        console.error('DATABASE ERROR deleting course:', err);
+        alert('Failed to delete course from database. Please try again.');
       }
     }
   };
@@ -187,21 +151,45 @@ const DashboardLectures = () => {
     if (window.confirm('Are you sure you want to delete this lecture?')) {
       try {
         const API_BASE_URL = 'http://localhost:5001';
-        await axios.delete(`${API_BASE_URL}/api/lectures/${lectureId}`, getAuthHeader());
-        setLectures(prev => prev.filter(lecture => lecture.id !== lectureId));
+        console.log(`DIRECT DATABASE DELETE: Deleting lecture with ID: ${lectureId}`);
+        
+        // Make the delete request to the server with no caching
+        const response = await axios.delete(`${API_BASE_URL}/api/lectures/${lectureId}`, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'x-auth-token': localStorage.getItem('token') || ''
+          }
+        });
+        
+        console.log('DATABASE DELETE RESPONSE:', response.data);
+        
+        // Always refresh from database after deletion
+        fetchDataFromDatabase();
+        
+        alert('Lecture deleted successfully. Refreshing data from database.');
       } catch (err) {
-        console.error('Error deleting lecture:', err);
-        alert('Failed to delete lecture. Please try again later.');
+        console.error('DATABASE ERROR deleting lecture:', err);
+        alert('Failed to delete lecture from database. Please try again.');
       }
     }
   };
   
+  // Helper function to format dates
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
   
+  // Helper function to get course title from course ID
+  const getCourseTitle = (courseId, coursesList) => {
+    if (!courseId || !coursesList || !coursesList.length) return 'Unknown Course';
+    const course = coursesList.find(c => c.id === courseId);
+    return course ? (course.title || course.name) : 'Unknown Course';
+  };
+
   return (
     <DashboardContainer>
       <Header>
@@ -227,14 +215,20 @@ const DashboardLectures = () => {
       
       <ContentHeader>
         <h2>{activeTab === 'courses' ? 'Courses' : 'Lectures'}</h2>
-        <AddButton 
-          onClick={() => activeTab === 'courses' 
-            ? setShowAddCourseModal(true) 
-            : setShowAddLectureModal(true)}
-        >
-          <FaPlus />
-          <span>Add {activeTab === 'courses' ? 'Course' : 'Lecture'}</span>
-        </AddButton>
+        <ActionButtonsContainer>
+          <RefreshButton onClick={fetchDataFromDatabase} title="Refresh data from database">
+            <FaSync />
+            <span>Refresh from Database</span>
+          </RefreshButton>
+          <AddButton 
+            onClick={() => activeTab === 'courses' 
+              ? setShowAddCourseModal(true) 
+              : setShowAddLectureModal(true)}
+          >
+            <FaPlus />
+            <span>Add {activeTab === 'courses' ? 'Course' : 'Lecture'}</span>
+          </AddButton>
+        </ActionButtonsContainer>
       </ContentHeader>
       
       {error && (
@@ -327,7 +321,7 @@ const DashboardLectures = () => {
                       <LectureTitle>{lecture.title}</LectureTitle>
                       <LectureDescription>{lecture.description?.substring(0, 100)}{lecture.description?.length > 100 ? '...' : ''}</LectureDescription>
                     </td>
-                    <td>{lecture.course_title || 'N/A'}</td>
+                    <td>{lecture.course_title || getCourseTitle(lecture.course_id, courses) || 'N/A'}</td>
                     <td>{formatDate(lecture.lecture_date)}</td>
                     <td>
                       <ResourceLinks>
@@ -438,6 +432,29 @@ const ContentHeader = styled.div`
   
   h2 {
     margin: 0;
+  }
+`;
+
+const ActionButtonsContainer = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const RefreshButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: #4a6da7;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: #3a5d97;
   }
 `;
 

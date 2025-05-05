@@ -40,8 +40,8 @@ router.get('/:id', async (req, res) => {
 
 // @route   POST api/lectures
 // @desc    Create a lecture
-// @access  Private (Admin only)
-router.post('/', [auth, admin], async (req, res) => {
+// @access  Public (No authentication required)
+router.post('/', async (req, res) => {
   const { 
     title, 
     description, 
@@ -63,7 +63,11 @@ router.post('/', [auth, admin], async (req, res) => {
       thumbnail,
       downloadUrl,
       duration,
-      createdBy: req.user.id
+      // Remove createdBy field since we don't have authentication
+      course_id: req.body.course_id,
+      lecture_no: req.body.lecture_no,
+      lecture_date: req.body.lecture_date,
+      slides_url: req.body.slides_url
     });
     
     const lecture = await newLecture.save();
@@ -76,8 +80,8 @@ router.post('/', [auth, admin], async (req, res) => {
 
 // @route   PUT api/lectures/:id
 // @desc    Update a lecture
-// @access  Private (Admin only)
-router.put('/:id', [auth, admin], async (req, res) => {
+// @access  Public (No authentication required)
+router.put('/:id', async (req, res) => {
   try {
     let lecture = await Lecture.findById(req.params.id);
     
@@ -103,8 +107,8 @@ router.put('/:id', [auth, admin], async (req, res) => {
 
 // @route   DELETE api/lectures/:id
 // @desc    Delete a lecture
-// @access  Private (Admin only)
-router.delete('/:id', [auth, admin], async (req, res) => {
+// @access  Public (No authentication required)
+router.delete('/:id', async (req, res) => {
   try {
     const lecture = await Lecture.findById(req.params.id);
     

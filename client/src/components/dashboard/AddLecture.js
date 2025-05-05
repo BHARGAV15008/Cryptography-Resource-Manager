@@ -103,13 +103,22 @@ const AddLecture = ({ onClose, onLectureAdded, onLectureUpdated, courses, lectur
       
       // Create FormData object for file upload
       const data = new FormData();
-      Object.keys(formData).forEach(key => {
-        if (key === 'additional_resources') {
-          data.append(key, JSON.stringify(formData[key]));
-        } else {
-          data.append(key, formData[key]);
-        }
-      });
+      
+      // Map to the server's expected field names
+      data.append('courseId', formData.course_id);
+      data.append('lectureNo', '1'); // Default lecture number
+      data.append('topic', formData.title);
+      data.append('date', formData.lecture_date || new Date().toISOString().split('T')[0]);
+      data.append('notes', JSON.stringify({ content: formData.description || '' }));
+      
+      // Only add video_url if it's not empty
+      if (formData.video_url && formData.video_url.trim() !== '') {
+        data.append('video_url', formData.video_url);
+      }
+      
+      if (formData.additional_resources && formData.additional_resources.length > 0) {
+        data.append('additional_resources', JSON.stringify(formData.additional_resources));
+      }
       
       if (slides) {
         data.append('slides', slides);
@@ -128,7 +137,7 @@ const AddLecture = ({ onClose, onLectureAdded, onLectureUpdated, courses, lectur
           {
             headers: {
               'Content-Type': 'multipart/form-data',
-              'Authorization': `Bearer ${token}`
+              'x-auth-token': token
             }
           }
         );
@@ -147,7 +156,7 @@ const AddLecture = ({ onClose, onLectureAdded, onLectureUpdated, courses, lectur
           {
             headers: {
               'Content-Type': 'multipart/form-data',
-              'Authorization': `Bearer ${token}`
+              'x-auth-token': token
             }
           }
         );

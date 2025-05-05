@@ -59,10 +59,11 @@ const AddCourse = ({ onClose, onCourseAdded, onCourseUpdated, professors, course
   
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
     
     try {
+      setLoading(true);
+      setError(null);
+      
       const token = localStorage.getItem('token');
       if (!token) {
         throw new Error('Authentication required');
@@ -70,26 +71,37 @@ const AddCourse = ({ onClose, onCourseAdded, onCourseUpdated, professors, course
       
       const API_BASE_URL = 'http://localhost:5001';
       
-      // Create FormData object for file upload
-      const data = new FormData();
-      Object.keys(formData).forEach(key => {
-        data.append(key, formData[key]);
-      });
+      // SIMPLIFIED: Use a regular JSON object instead of FormData
+      const courseData = {
+        title: formData.title,
+        name: formData.title, // Include both for compatibility
+        description: formData.description || '',
+        code: formData.code || '',
+        semester: formData.semester || '',
+        year: formData.year || ''
+      };
       
-      if (image) {
-        data.append('image', image);
+      // Only include professor_id if it's not empty
+      if (formData.professor_id && formData.professor_id !== '') {
+        courseData.professor_id = formData.professor_id;
       }
+      
+      if (formData.syllabus_url) {
+        courseData.syllabus_url = formData.syllabus_url;
+      }
+      
+      console.log('Sending course data to server:', courseData);
       
       let response;
       
       if (isEditMode) {
         response = await axios.put(
           `${API_BASE_URL}/api/courses/${courseToEdit.id}`,
-          data,
+          courseData,
           {
             headers: {
-              'Content-Type': 'multipart/form-data',
-              'Authorization': `Bearer ${token}`
+              'Content-Type': 'application/json',
+              'x-auth-token': token
             }
           }
         );
@@ -101,16 +113,23 @@ const AddCourse = ({ onClose, onCourseAdded, onCourseUpdated, professors, course
           image_url: response.data.image_url || courseToEdit.image_url
         });
       } else {
+        // Log the actual request being sent
+        console.log('Sending POST request to:', `${API_BASE_URL}/api/courses`);
+        console.log('With data:', courseData);
+        console.log('And headers:', { 'Content-Type': 'application/json', 'x-auth-token': token });
+        
         response = await axios.post(
           `${API_BASE_URL}/api/courses`,
-          data,
+          courseData,
           {
             headers: {
-              'Content-Type': 'multipart/form-data',
-              'Authorization': `Bearer ${token}`
+              'Content-Type': 'application/json',
+              'x-auth-token': token
             }
           }
         );
+        
+        console.log('Server response:', response.data);
         
         onCourseAdded({
           ...formData,

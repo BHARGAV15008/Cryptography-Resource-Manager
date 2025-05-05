@@ -11,8 +11,7 @@ const Resources = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
-    type: 'all',
-    tag: 'all'
+    type: 'all'
   });
   const [availableTags, setAvailableTags] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -402,11 +401,7 @@ const Resources = () => {
     // Type filter
     const matchesType = filters.type === 'all' || resource.type === filters.type;
     
-    // Tag filter
-    const matchesTag = filters.tag === 'all' || 
-      (resource.tags && resource.tags.includes(filters.tag));
-    
-    return matchesSearch && matchesType && matchesTag;
+    return matchesSearch && matchesType;
   });
   
   return (
@@ -476,20 +471,6 @@ const Resources = () => {
                 <option value="article">Articles</option>
               </FilterSelect>
             </FilterGroup>
-            
-            <FilterGroup>
-              <FilterLabel>Tag</FilterLabel>
-              <FilterSelect 
-                name="tag" 
-                value={filters.tag} 
-                onChange={handleFilterChange}
-              >
-                <option value="all">All Tags</option>
-                {availableTags.map(tag => (
-                  <option key={tag} value={tag}>{tag}</option>
-                ))}
-              </FilterSelect>
-            </FilterGroup>
           </FiltersContainer>
         )}
         
@@ -501,7 +482,7 @@ const Resources = () => {
           <EmptyState>
             <EmptyTitle>No resources found</EmptyTitle>
             <EmptyDescription>
-              {searchTerm || filters.type !== 'all' || filters.tag !== 'all'
+              {searchTerm || filters.type !== 'all'
                 ? 'Try adjusting your search or filters.'
                 : 'No resources have been added yet.'}
             </EmptyDescription>

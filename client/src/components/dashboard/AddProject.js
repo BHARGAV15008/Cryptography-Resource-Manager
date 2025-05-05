@@ -12,7 +12,7 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
     startDate: '',
     endDate: '',
     professor_id: '',
-    status: 'Ongoing',
+    status: 'active',
     technologies: [],
     members: [],
     publication_url: ''
@@ -56,8 +56,8 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
         type: projectToEdit.category || 'Research',
         startDate: projectToEdit.start_date ? new Date(projectToEdit.start_date).toISOString().split('T')[0] : '',
         endDate: projectToEdit.end_date ? new Date(projectToEdit.end_date).toISOString().split('T')[0] : '',
-        professor_id: projectToEdit.professor_id || '',
-        status: projectToEdit.status || 'Ongoing',
+        professor_id: projectToEdit.professor_id || projectToEdit.leader_id || '',
+        status: projectToEdit.status || 'active',
         technologies: technologies,
         members: members,
         publication_url: projectToEdit.publication_url || ''
@@ -126,11 +126,21 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
     setError('');
     
     try {
+      // Find the selected professor to include in team members
+      const selectedProfessor = professors.find(prof => prof.id.toString() === formData.professor_id.toString());
+      const professorName = selectedProfessor ? selectedProfessor.name : '';
+      
+      // Add professor as a guide in the team members with a special role
+      const teamMembers = [
+        ...formData.members,
+        { name: professorName, role: 'Guide', professor_id: formData.professor_id }
+      ];
+      
       // Convert arrays to JSON strings for the API
       const projectData = {
         ...formData,
         technologies: JSON.stringify(formData.technologies),
-        members: JSON.stringify(formData.members)
+        members: JSON.stringify(teamMembers)
       };
       
       const API_BASE_URL = 'http://localhost:5001';
@@ -177,15 +187,18 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
       setIsSubmitting(false);
     }
   };
-  
-  const isEditMode = !!projectToEdit;
-  
+
   return (
     <Modal>
       <ModalContent>
         <ModalHeader>
-          <h2><FaProjectDiagram /> {isEditMode ? 'Edit Project' : 'Add New Project'}</h2>
-          <CloseButton onClick={onClose}><FaTimes /></CloseButton>
+          <h2>
+            <FaProjectDiagram />
+            {projectToEdit ? 'Edit Project' : 'Add New Project'}
+          </h2>
+          <CloseButton onClick={onClose}>
+            <FaTimes />
+          </CloseButton>
         </ModalHeader>
         
         {error && <ErrorMessage>{error}</ErrorMessage>}
@@ -194,7 +207,6 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
           <FormGroup>
             <Label htmlFor="title">Project Title *</Label>
             <Input
-              type="text"
               id="title"
               name="title"
               value={formData.title}
@@ -212,25 +224,26 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
               value={formData.description}
               onChange={handleChange}
               required
-              placeholder="Enter project description"
               rows={4}
+              placeholder="Enter project description"
             />
           </FormGroup>
           
           <FormRow>
             <FormGroup>
               <Label htmlFor="type">Project Type *</Label>
-              <Select
-                id="type"
-                name="type"
-                value={formData.type}
+              <Select 
+                name="type" 
+                value={formData.type} 
                 onChange={handleChange}
                 required
               >
+                <option value="IP">IP</option>
+                <option value="IS">IS</option>
+                <option value="BTP">BTP</option>
+                <option value="Capstone">Capstone</option>
+                <option value="Thesis">Thesis</option>
                 <option value="Research">Research</option>
-                <option value="Development">Development</option>
-                <option value="Industry">Industry</option>
-                <option value="Academic">Academic</option>
               </Select>
             </FormGroup>
             
@@ -243,9 +256,10 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
                 onChange={handleChange}
                 required
               >
-                <option value="Ongoing">Ongoing</option>
-                <option value="Completed">Completed</option>
-                <option value="Planned">Planned</option>
+                <option value="planning">Planning</option>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="archived">Archived</option>
               </Select>
             </FormGroup>
           </FormRow>
@@ -254,9 +268,9 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
             <FormGroup>
               <Label htmlFor="startDate">Start Date *</Label>
               <Input
-                type="date"
                 id="startDate"
                 name="startDate"
+                type="date"
                 value={formData.startDate}
                 onChange={handleChange}
                 required
@@ -266,9 +280,9 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
             <FormGroup>
               <Label htmlFor="endDate">End Date</Label>
               <Input
-                type="date"
                 id="endDate"
                 name="endDate"
+                type="date"
                 value={formData.endDate}
                 onChange={handleChange}
               />
@@ -276,7 +290,7 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
           </FormRow>
           
           <FormGroup>
-            <Label htmlFor="professor_id">Project Guide/Professor *</Label>
+            <Label htmlFor="professor_id">Guide/Professor *</Label>
             <Select
               id="professor_id"
               name="professor_id"
@@ -284,23 +298,24 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
               onChange={handleChange}
               required
             >
-              <option value="" disabled>Select a Professor</option>
+              <option value="">Select a professor</option>
               {professors.map(professor => (
                 <option key={professor.id} value={professor.id}>
-                  {professor.name} - {professor.title}
+                  {professor.name}
                 </option>
               ))}
             </Select>
           </FormGroup>
           
           <FormGroup>
-            <Label>Technologies/Tools Used</Label>
+            <Label>Technologies</Label>
             <TagInputContainer>
               <TagInput
                 type="text"
                 value={newTechnology}
                 onChange={(e) => setNewTechnology(e.target.value)}
-                placeholder="Add a technology (e.g., Python, TensorFlow)"
+                placeholder="Add a technology"
+                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addTechnology())}
               />
               <AddButton type="button" onClick={addTechnology}>
                 <FaPlus />
@@ -320,13 +335,14 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
           </FormGroup>
           
           <FormGroup>
-            <Label>Project Members</Label>
+            <Label>Team Members</Label>
             <TagInputContainer>
               <TagInput
                 type="text"
                 value={newMember}
                 onChange={(e) => setNewMember(e.target.value)}
-                placeholder="Add a team member (e.g., Rahul Gupta)"
+                placeholder="Add a team member"
+                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addMember())}
               />
               <AddButton type="button" onClick={addMember}>
                 <FaPlus />
@@ -345,27 +361,24 @@ const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }
             </TagList>
           </FormGroup>
           
-          {/* Funding fields removed as requested */}
-          
           <FormGroup>
-            <Label htmlFor="publication_url">Publication/Project URL</Label>
+            <Label htmlFor="publication_url">Publication URL</Label>
             <Input
-              type="url"
               id="publication_url"
               name="publication_url"
+              type="url"
               value={formData.publication_url}
               onChange={handleChange}
-              placeholder="e.g., https://arxiv.org/abs/2104.12345"
+              placeholder="https://example.com/publication"
             />
           </FormGroup>
           
           <ButtonGroup>
-            <CancelButton type="button" onClick={onClose}>Cancel</CancelButton>
+            <CancelButton type="button" onClick={onClose}>
+              Cancel
+            </CancelButton>
             <SubmitButton type="submit" disabled={isSubmitting}>
-              {isSubmitting 
-                ? (isEditMode ? 'Updating...' : 'Adding...') 
-                : (isEditMode ? 'Update Project' : 'Add Project')
-              }
+              {isSubmitting ? 'Saving...' : projectToEdit ? 'Update Project' : 'Add Project'}
             </SubmitButton>
           </ButtonGroup>
         </Form>

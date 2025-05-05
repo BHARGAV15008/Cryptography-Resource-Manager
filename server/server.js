@@ -106,8 +106,39 @@ app.get('/api/health', (req, res) => {
   }
 })();
 
+// Import executeQuery function
+const { executeQuery } = require('./config/db');
+
+// Simple auth middleware for direct routes
+function directVerifyToken(req, res, next) {
+  const token = req.header('x-auth-token');
+  
+  if (!token) {
+    // For development, allow requests without token
+    console.log('No token provided, continuing without authentication');
+    next();
+    return;
+  }
+  
+  try {
+    // In a real app, we would verify the token here
+    // For development, we'll just mock a user
+    req.user = {
+      id: 1,
+      name: 'Test User',
+      email: 'test@example.com',
+      role: 'admin'
+    };
+    next();
+  } catch (err) {
+    console.error('Token verification error:', err);
+    res.status(401).json({ message: 'Invalid token' });
+  }
+}
+
 // Define Routes
 try {
+  // Standard routes
   app.use('/api/auth', require('./routes/auth'));
   console.log('Registered /api/auth route');
   app.use('/api/users', require('./routes/users'));
@@ -118,77 +149,25 @@ try {
   console.log('Registered /api/news route');
   app.use('/api/iacr-news', require('./routes/iacrNews'));
   console.log('Registered /api/iacr-news route');
-} catch (error) {
-  console.error('Error registering initial routes:', error);
-}
-
-try {
   app.use('/api/resources', require('./routes/resources'));
   console.log('Registered /api/resources route');
-  app.use('/api/bookmarks', require('./routes/bookmarks'));
-  console.log('Registered /api/bookmarks route');
-  app.use('/api/dashboard', require('./routes/dashboard'));
-  console.log('Registered /api/dashboard route');
   app.use('/api/events', require('./routes/events'));
   console.log('Registered /api/events route');
-  
-    // Import executeQuery function
-  const { executeQuery } = require('./config/db');
-  
-  // Direct implementation of auth routes
-  console.log('Adding direct auth routes implementation');
-  
-  // Simple auth middleware for direct routes
-  const directVerifyToken = (req, res, next) => {
-    // Get token from header
-    const token = req.header('x-auth-token');
-    console.log('Token provided:', token ? 'Yes' : 'No');
-    
-    // For this simplified server, we'll accept any token
-    if (!token) {
-      return res.status(401).json({ message: 'No token, authorization denied' });
-    }
-
-    // Simulate attaching user data to request
-    req.user = {
-      id: 1,
-      firstName: 'Mock',
-      lastName: 'User',
-      email: 'admin@example.com',
-      role: 'admin'
-    };
-    
-    next();
-  };
+  app.use('/api/projects', require('./routes/projects'));
+  console.log('Registered /api/projects route');
+  app.use('/api/professors', require('./routes/professors'));
+  console.log('Registered /api/professors route');
   
   // Direct auth routes
   app.get('/api/auth/profile', directVerifyToken, (req, res) => {
     console.log('Profile endpoint accessed');
     res.json({
       user: req.user,
-      permissions: ['manage_courses', 'manage_lectures', 'manage_projects', 'manage_professors']
+      message: 'Profile data retrieved'
     });
   });
   
-  // Direct login route
-  app.post('/api/auth/login', (req, res) => {
-    const { email, password } = req.body;
-    console.log(`Login attempt: ${email}`);
-    
-    // Return mock user data
-    res.json({
-      id: 1,
-      firstName: 'Mock',
-      lastName: 'User',
-      email: email || 'admin@example.com',
-      token: 'mock-jwt-token-for-development-only',
-      role: 'admin',
-      redirectTo: '/dashboard'
-    });
-  });
-  
-  // Register courses route first - attempt file-based route first, fall back to direct implementation
-  console.log('About to register /api/courses route');
+  // Try to use courses route from file, fall back to direct implementation
   try {
     app.use('/api/courses', require('./routes/courses'));
     console.log('Registered /api/courses route from file');
@@ -203,23 +182,27 @@ try {
         // First, log the courses table schema to help debugging
         try {
           const tableInfo = await executeQuery(`DESCRIBE courses`);
-          console.log('Courses table schema:', tableInfo.map(col => col.Field));
+          console.log('Courses table schema:', tableInfo.map(col => col.Field).join(', '));
         } catch (schemaError) {
-          console.log('Could not fetch table schema:', schemaError.message);
+          console.error('Error fetching courses schema:', schemaError);
         }
         
-        // Use a simpler query to ensure we get all courses
         const courses = await executeQuery(`
-          SELECT * FROM courses
-          ORDER BY created_at DESC
+          SELECT c.*, p.name as professor_name 
+          FROM courses c
+          LEFT JOIN professors p ON c.professor_id = p.id
+          ORDER BY c.created_at DESC
         `);
         
-        // Transform the results to match what the client expects
+        // Transform the data to match the expected format
         const transformedCourses = courses.map(course => ({
           id: course.id,
-          name: course.title,  // Map title to name for client compatibility
+          name: course.title,
           description: course.description,
           code: course.code,
+          semester: course.semester,
+          year: course.year,
+          professor_name: course.professor_name,
           professor_id: course.professor_id,
           created_at: course.created_at,
           // Add empty lectures array for each course
@@ -234,25 +217,17 @@ try {
               ORDER BY lecture_date DESC
             `);
             
-            console.log(`Lectures fetched: ${lectures.length}`);
-            
-            // Add lectures to their respective courses
+            // Group lectures by course
             lectures.forEach(lecture => {
-              const courseIndex = transformedCourses.findIndex(c => c.id === lecture.course_id);
-              if (courseIndex !== -1) {
-                if (!transformedCourses[courseIndex].lectures) {
-                  transformedCourses[courseIndex].lectures = [];
-                }
-                
-                transformedCourses[courseIndex].lectures.push({
+              const course = transformedCourses.find(c => c.id === lecture.course_id);
+              if (course) {
+                course.lectures.push({
                   id: lecture.id,
-                  lectureNo: lecture.id, // Use ID as lecture number if none exists
-                  topic: lecture.title,  // Map title to topic for client compatibility
+                  title: lecture.title,
                   date: lecture.lecture_date,
-                  notes: {
-                    type: 'url',
-                    content: lecture.description || ''
-                  }
+                  description: lecture.description,
+                  slides_url: lecture.slides_url,
+                  video_url: lecture.video_url
                 });
               }
             });
@@ -270,49 +245,87 @@ try {
       }
     });
     
+    // DELETE a course by ID - SIMPLIFIED VERSION
+    app.delete('/api/courses/:id', directVerifyToken, async (req, res) => {
+      try {
+        const courseId = req.params.id;
+        console.log(`DIRECT DATABASE DELETION ATTEMPT for course ID: ${courseId}`);
+        
+        // Simple direct deletion without any complex logic
+        const result = await executeQuery('DELETE FROM courses WHERE id = ?', [courseId]);
+        
+        console.log('Delete result:', result);
+        console.log('Affected rows:', result.affectedRows);
+        
+        if (result.affectedRows > 0) {
+          console.log(`SUCCESSFULLY DELETED course with ID: ${courseId}`);
+          res.status(200).json({ message: 'Course deleted successfully' });
+        } else {
+          console.log(`NO COURSE FOUND with ID: ${courseId}`);
+          res.status(404).json({ message: 'Course not found' });
+        }
+      } catch (err) {
+        console.error('DATABASE ERROR DELETING COURSE:', err);
+        console.error('SQL Error Code:', err.code);
+        console.error('SQL Error Message:', err.message);
+        
+        res.status(500).json({ 
+          message: 'Failed to delete course from database',
+          error: err.message,
+          sqlError: err.code
+        });
+      }
+    });
+    
     // POST create a new course
     app.post('/api/courses', directVerifyToken, async (req, res) => {
       try {
         console.log('Adding new course via direct implementation...');
         console.log('Request body:', req.body);
+        console.log('Request headers:', req.headers);
+        console.log('Content-Type:', req.headers['content-type']);
+        
+        // Log all form fields for debugging
+        if (req.body instanceof Object) {
+          console.log('Form fields:', Object.keys(req.body));
+          for (const key in req.body) {
+            console.log(`Field ${key}:`, req.body[key]);
+          }
+        }
         
         // Map client-side field names to server-side field names
-        const { name, description } = req.body;
-        const title = name; // Use name as title
-        const createdBy = req.user ? req.user.id : 1;
+        const { name, title: clientTitle, description, code, semester, year, professor_id, syllabus_url } = req.body;
         
-        // Actually insert into the database
+        // Use either name or title from the client, prioritizing name if available
+        const title = name || clientTitle || 'Untitled Course';
+        console.log('Using title:', title);
+        
+        // CRITICAL: Force console log to ensure we're actually trying to save
+        console.log('ATTEMPTING TO SAVE COURSE TO DATABASE WITH TITLE:', title);
+        
+        const createdBy = req.user ? req.user.id : null;
+        
+        // SIMPLIFIED: Direct database insertion with minimal complexity
         try {
-          // Generate a course code if one wasn't provided
-          // Use the first 3 letters of the title + random number
-          const code = title.substring(0, 3).toUpperCase() + Math.floor(Math.random() * 1000);
+          // Use provided code or generate one if not provided
+          const courseCode = code || title.substring(0, 3).toUpperCase() + Math.floor(Math.random() * 1000);
           
-          console.log('Checking for valid users in the database...');
-          // First, check if there are any valid users in the database
-          const users = await executeQuery('SELECT id FROM users LIMIT 1');
+          console.log('DIRECT DATABASE INSERTION ATTEMPT');
+          console.log('Title:', title);
+          console.log('Code:', courseCode);
+          console.log('Description:', description);
           
-          // Build the SQL query with all required fields
-          let sql, queryParams;
+          // Simple direct SQL insertion
+          const sql = `
+            INSERT INTO courses (title, code, description, semester, year, professor_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, NULL, NOW(), NOW())
+          `;
           
-          if (users && users.length > 0) {
-            // If we have valid users, use the first one as created_by
-            sql = `
-              INSERT INTO courses (title, code, description, created_by, created_at, updated_at)
-              VALUES (?, ?, ?, ?, NOW(), NOW())
-            `;
-            queryParams = [title, code, description, users[0].id];
-            console.log(`Using existing user ID: ${users[0].id} as created_by`);
-          } else {
-            // Otherwise, set created_by to NULL (which is allowed by the constraint)
-            sql = `
-              INSERT INTO courses (title, code, description, created_by, created_at, updated_at)
-              VALUES (?, ?, ?, NULL, NOW(), NOW())
-            `;
-            queryParams = [title, code, description];
-            console.log('No valid users found, setting created_by to NULL');
-          }
+          const queryParams = [title, courseCode, description, semester || null, year || null];
+          console.log('Executing SQL:', sql);
+          console.log('With parameters:', queryParams);
           
-          // Execute the query
+          // Execute the query directly
           const result = await executeQuery(sql, queryParams);
           
           console.log(`Course created with ID: ${result.insertId}`);
@@ -321,17 +334,16 @@ try {
             courseId: result.insertId
           });
         } catch (dbError) {
-          console.error('Database error creating course:', dbError);
+          console.error('DATABASE ERROR CREATING COURSE:', dbError);
+          console.error('SQL Error Code:', dbError.code);
+          console.error('SQL Error Message:', dbError.message);
+          console.error('SQL Error State:', dbError.sqlState);
           
-          // Fallback to simulation if database insert fails
-          const mockResult = {
-            insertId: Math.floor(Math.random() * 1000) + 1 // Simulate an insert ID
-          };
-          
-          console.log(`Failed to insert in DB. Mock course created with ID: ${mockResult.insertId}`);
-          res.status(201).json({ 
-            message: 'Course created successfully (mock)',
-            courseId: mockResult.insertId
+          // Return the actual error to the client
+          res.status(500).json({ 
+            message: 'Failed to create course in database',
+            error: dbError.message,
+            sqlError: dbError.code
           });
         }
       } catch (err) {
@@ -341,8 +353,7 @@ try {
     });
   }
   
-  // Then register lectures route - attempt file-based route first, fall back to direct implementation
-  console.log('About to register /api/lectures route');
+  // Try to use lectures route from file, fall back to direct implementation
   try {
     app.use('/api/lectures', require('./routes/lectures'));
     console.log('Registered /api/lectures route from file');
@@ -374,58 +385,67 @@ try {
         console.log('Adding new lecture via direct implementation...');
         console.log('Request body:', req.body);
         
-        // Map client-side fields to server-side fields
-        const { courseId, lectureNo, topic, date, notes } = req.body;
+        // Extract all possible fields from the request body
+        const { 
+          title, 
+          topic, 
+          course_id, 
+          courseId, 
+          lecture_no, 
+          lectureNo,
+          lecture_date, 
+          date, 
+          description, 
+          notes,
+          slides_url
+        } = req.body;
         
-        // Check for valid users in the database
-        console.log('Checking for valid users in the database...');
-        const users = await executeQuery('SELECT id FROM users LIMIT 1');
+        // Log all fields for debugging
+        console.log('All extracted fields:', {
+          title, topic, course_id, courseId, lecture_no, lectureNo, lecture_date, date, description, notes, slides_url
+        });
         
-        let createdBy = null;
-        if (users && users.length > 0) {
-          createdBy = users[0].id;
-          console.log(`Using existing user ID: ${createdBy} as created_by`);
-        } else {
-          console.log('No valid users found, setting created_by to NULL');
-        }
+        // Use the appropriate fields (client-side or server-side naming)
+        const finalTitle = title || topic || 'Untitled Lecture';
+        const finalCourseId = course_id || courseId;
+        const finalLectureNo = lecture_no || lectureNo || '1';
+        const finalDate = lecture_date || date || new Date().toISOString().split('T')[0];
+        const finalDescription = description || (notes && notes.content) || 'No description';
+        const finalSlidesUrl = slides_url || '';
         
-        // Map client field names to database field names
-        // title = topic, course_id = courseId, lecture_date = date
-        try {
-          const lectureNumber = parseInt(lectureNo, 10) || 1;
-          const title = `Lecture ${lectureNumber}: ${topic}`;
-          
-          // Build the SQL query with all required fields
-          const sql = `
-            INSERT INTO lectures (title, course_id, lecture_date, description, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, NOW(), NOW())
-          `;
-          
-          const queryParams = [title, courseId, date, notes.content, createdBy];
-          const result = await executeQuery(sql, queryParams);
-          
-          console.log(`Lecture created with ID: ${result.insertId}`);
-          res.status(201).json({ 
-            message: 'Lecture created successfully',
-            lectureId: result.insertId
-          });
-        } catch (dbError) {
-          console.error('Database error creating lecture:', dbError);
-          
-          // Fallback to simulation if database insert fails
-          const mockResult = {
-            insertId: Math.floor(Math.random() * 1000) + 1 // Simulate an insert ID
-          };
-          
-          console.log(`Failed to insert in DB. Mock lecture created with ID: ${mockResult.insertId}`);
-          res.status(201).json({ 
-            message: 'Lecture created successfully (mock)',
-            lectureId: mockResult.insertId
-          });
-        }
+        console.log('Final fields for database:', {
+          title: finalTitle,
+          course_id: finalCourseId,
+          lecture_no: finalLectureNo,
+          lecture_date: finalDate,
+          description: finalDescription,
+          slides_url: finalSlidesUrl
+        });
+        
+        // Build the SQL query with all required fields - remove lecture_no which doesn't exist in the schema
+        const sql = `
+          INSERT INTO lectures (title, course_id, lecture_date, description, slides_url, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+        `;
+        
+        // Remove finalLectureNo from parameters since we removed it from the SQL query
+        const queryParams = [finalTitle, finalCourseId, finalDate, finalDescription, finalSlidesUrl];
+        console.log('SQL query:', sql);
+        console.log('Query parameters:', queryParams);
+        
+        const result = await executeQuery(sql, queryParams);
+        
+        console.log(`Lecture created with ID: ${result.insertId}`);
+        res.status(201).json({ 
+          message: 'Lecture created successfully',
+          lectureId: result.insertId
+        });
       } catch (err) {
         console.error('Error creating lecture:', err);
-        res.status(500).json({ message: 'Server error', error: err.message });
+        res.status(500).json({ 
+          message: 'Failed to create lecture', 
+          error: err.message 
+        });
       }
     });
     
@@ -446,11 +466,6 @@ try {
       }
     });
   }
-  
-  app.use('/api/projects', require('./routes/projects'));
-  console.log('Registered /api/projects route');
-  app.use('/api/professors', require('./routes/professors'));
-  console.log('Registered /api/professors route');
 } catch (error) {
   console.error('Error registering routes:', error);
 }

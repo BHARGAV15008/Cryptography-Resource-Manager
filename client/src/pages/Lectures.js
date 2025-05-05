@@ -7,19 +7,28 @@ const Lectures = () => {
   const [selectedCourse, setSelectedCourse] = useState('');
   const [lectures, setLectures] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   // Fetch courses on component mount
   useEffect(() => {
     const fetchCourses = async () => {
       try {
-        const response = await axios.get('http://0.0.0.0:5001/api/courses', {
-          headers: {
-            'x-auth-token': localStorage.getItem('token')
-          }
+        setLoading(true);
+        console.log('Fetching courses...');
+        // Remove any custom headers that might cause CORS issues
+        const response = await axios.get('http://localhost:5001/api/courses', {
+          params: { timestamp: new Date().getTime() } // Add cache-busting parameter
         });
+        console.log('Fetched courses:', response.data);
         setCourses(response.data);
+        if (response.data.length > 0) {
+          setSelectedCourse(response.data[0].id);
+        }
       } catch (error) {
         console.error('Error fetching courses:', error);
+        setError('Failed to load courses. Please try again later.');
+      } finally {
+        setLoading(false);
       }
     };
     fetchCourses();
@@ -31,16 +40,42 @@ const Lectures = () => {
       const fetchLectures = async () => {
         setLoading(true);
         try {
-          const response = await axios.get(`http://0.0.0.0:5001/api/lectures/${selectedCourse}`, {
-            headers: {
-              'x-auth-token': localStorage.getItem('token')
-            }
+          console.log(`Fetching lectures for course ID: ${selectedCourse}`);
+          // First try to fetch from the course/:courseId endpoint
+          const response = await axios.get(`http://localhost:5001/api/lectures/course/${selectedCourse}`, {
+            params: { timestamp: new Date().getTime() } // Add cache-busting parameter
           });
+          console.log('Fetched lectures:', response.data);
           setLectures(response.data);
+          setError(null);
         } catch (error) {
-          console.error('Error fetching lectures:', error);
+          console.error('Error fetching lectures from course endpoint:', error);
+          
+          try {
+            // If that fails, try to fetch all lectures and filter client-side
+            console.log('Trying to fetch all lectures and filter client-side...');
+            const allLecturesResponse = await axios.get('http://localhost:5001/api/lectures', {
+              params: { timestamp: new Date().getTime() } // Add cache-busting parameter
+            });
+            console.log('All lectures:', allLecturesResponse.data);
+            
+            // Handle different data formats - some might use course_id, others courseId
+            const filteredLectures = allLecturesResponse.data.filter(lecture => {
+              const lectureId = lecture.course_id || lecture.courseId;
+              return lectureId === parseInt(selectedCourse) || lectureId === selectedCourse;
+            });
+            
+            console.log('Filtered lectures:', filteredLectures);
+            setLectures(filteredLectures);
+            setError(null);
+          } catch (secondError) {
+            console.error('Error fetching all lectures:', secondError);
+            setError('Failed to load lectures. Please try again later.');
+            setLectures([]);
+          }
+        } finally {
+          setLoading(false);
         }
-        setLoading(false);
       };
       fetchLectures();
     }
@@ -57,53 +92,75 @@ const Lectures = () => {
         </PageHeader>
 
         <SectionContainer>
-          {/* <SectionTitle>Lectures at crypto-iiitd</SectionTitle> */}
-          
           <CourseSelect
             value={selectedCourse}
             onChange={(e) => setSelectedCourse(e.target.value)}
           >
             <option value="">Select a course</option>
             {courses.map(course => (
-              <option key={course._id} value={course._id}>
-                {course.name}
+              <option key={course.id} value={course.id}>
+                {course.title}
               </option>
             ))}
           </CourseSelect>
+
+          {error && <ErrorMessage>{error}</ErrorMessage>}
 
           {selectedCourse && (
             <TableContainer>
               {loading ? (
                 <LoadingText>Loading lectures...</LoadingText>
-              ) : (
+              ) : lectures.length > 0 ? (
                 <LectureTable>
                   <thead>
                     <tr>
-                      <th>Lecture No.</th>
+                      <th>#</th>
                       <th>Topic</th>
                       <th>Date</th>
-                      <th>Get Notes</th>
+                      <th>Resources</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {lectures.map(lecture => (
-                      <tr key={lecture._id}>
-                        <td>{lecture.lectureNo}</td>
-                        <td>{lecture.topic}</td>
-                        <td>{new Date(lecture.date).toLocaleDateString()}</td>
+                    {lectures.map((lecture, index) => (
+                      <tr key={lecture.id}>
+                        <td>{index + 1}</td>
+                        <td>{lecture.title || lecture.topic || 'Untitled Lecture'}</td>
                         <td>
-                          <DownloadButton 
-                            href={lecture.notesUrl} 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            Download
-                          </DownloadButton>
+                          {(lecture.lecture_date || lecture.date) 
+                            ? new Date(lecture.lecture_date || lecture.date).toLocaleDateString() 
+                            : 'N/A'}
+                        </td>
+                        <td>
+                          <ResourceLinks>
+                            {lecture.slides_url && (
+                              <DownloadButton 
+                                href={lecture.slides_url.startsWith('http') 
+                                  ? lecture.slides_url 
+                                  : `http://localhost:5001${lecture.slides_url}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Slides
+                              </DownloadButton>
+                            )}
+                            {lecture.video_url && (
+                              <DownloadButton 
+                                href={lecture.video_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="video"
+                              >
+                                Video
+                              </DownloadButton>
+                            )}
+                          </ResourceLinks>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </LectureTable>
+              ) : (
+                <EmptyMessage>No lectures found for this course.</EmptyMessage>
               )}
             </TableContainer>
           )}
@@ -135,13 +192,6 @@ const PageDescription = styled.p`
 
 const SectionContainer = styled.div`
   margin-top: 3rem;
-`;
-
-const SectionTitle = styled.h2`
-  font-size: 2rem;
-  color: ${({ theme }) => theme.colors.text};
-  margin-bottom: 1.5rem;
-  text-align: left;
 `;
 
 const CourseSelect = styled.select`
@@ -189,17 +239,22 @@ const LectureTable = styled.table`
   }
 `;
 
+const ResourceLinks = styled.div`
+  display: flex;
+  gap: 0.5rem;
+`;
+
 const DownloadButton = styled.a`
   display: inline-block;
   padding: 0.5rem 1rem;
-  background-color: ${({ theme }) => theme.colors.primary};
+  background-color: ${props => props.className === 'video' ? '#e53935' : props.theme.colors.primary};
   color: white;
   text-decoration: none;
   border-radius: 4px;
   font-size: 0.9rem;
   
   &:hover {
-    background-color: ${({ theme }) => theme.colors.primaryDark};
+    background-color: ${props => props.className === 'video' ? '#c62828' : props.theme.colors.primaryDark};
   }
 `;
 
@@ -207,6 +262,20 @@ const LoadingText = styled.p`
   text-align: center;
   color: ${({ theme }) => theme.colors.textLight};
   padding: 2rem 0;
+`;
+
+const EmptyMessage = styled.p`
+  text-align: center;
+  color: ${({ theme }) => theme.colors.textLight};
+  padding: 2rem 0;
+`;
+
+const ErrorMessage = styled.div`
+  background-color: #ffebee;
+  color: #c62828;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
 `;
 
 export default Lectures;

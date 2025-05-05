@@ -104,11 +104,15 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     const membersJson = members ? JSON.stringify(members) : JSON.stringify([]);
     const techJson = technologies ? JSON.stringify(technologies) : JSON.stringify([]);
     
-    // Set leader_id to null to avoid foreign key constraint issues
-    // The professor_id should be stored in a different way or the schema needs to be updated
+    // Ensure status is one of the valid enum values: 'planning', 'active', 'completed', 'archived'
+    const validStatus = ['planning', 'active', 'completed', 'archived'].includes(status) 
+      ? status 
+      : 'planning';
+      
+    // Save project without leader_id to avoid foreign key constraint error
     const result = await executeQuery(
       'INSERT INTO projects (title, description, status, start_date, end_date, category, team_members, tags, website, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [title, description, status || 'Ongoing', startDate || null, endDate || null, type || 'Research', membersJson, techJson, publication_url || null, createdBy]
+      [title, description, validStatus, startDate || null, endDate || null, type || 'Research', membersJson, techJson, publication_url || null, createdBy]
     );
     
     res.status(201).json({ 
@@ -136,10 +140,14 @@ router.put('/:id', auth, upload.single('file'), async (req, res) => {
     const membersJson = members ? JSON.stringify(members) : JSON.stringify([]);
     const techJson = technologies ? JSON.stringify(technologies) : JSON.stringify([]);
     
-    // Set leader_id to null to avoid foreign key constraint issues
-    // The professor_id should be stored in a different way or the schema needs to be updated
+    // Ensure status is one of the valid enum values: 'planning', 'active', 'completed', 'archived'
+    const validStatus = ['planning', 'active', 'completed', 'archived'].includes(status) 
+      ? status 
+      : 'planning';
+      
+    // Update leader_id with professor_id
     let updateQuery = 'UPDATE projects SET title = ?, description = ?, status = ?, start_date = ?, end_date = ?, category = ?, team_members = ?, tags = ?, website = ?';
-    let queryParams = [title, description, status || 'Ongoing', startDate || null, endDate || null, type || 'Research', membersJson, techJson, publication_url || null];
+    let queryParams = [title, description, validStatus, startDate || null, endDate || null, type || 'Research', membersJson, techJson, publication_url || null];
     
     if (req.file) {
       updateQuery += ', file_path = ?';
