@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { FaUserTie, FaTimes, FaUpload } from 'react-icons/fa';
 import axios from 'axios';
 
-const AddProfessor = ({ onClose, onProfessorAdded }) => {
+const AddProfessor = ({ onClose, onProfessorAdded, onProfessorUpdated, professorToEdit }) => {
   const [formData, setFormData] = useState({
     name: '',
     title: '',
@@ -18,6 +18,25 @@ const AddProfessor = ({ onClose, onProfessorAdded }) => {
   const [previewUrl, setPreviewUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  
+  // Initialize form data when editing
+  useEffect(() => {
+    if (professorToEdit) {
+      setFormData({
+        name: professorToEdit.name || '',
+        title: professorToEdit.title || '',
+        email: professorToEdit.email || '',
+        department: professorToEdit.department || 'Cryptography',
+        specialization: professorToEdit.specialization || '',
+        biography: professorToEdit.biography || '',
+        website: professorToEdit.website || ''
+      });
+      
+      if (professorToEdit.profile_image) {
+        setPreviewUrl(professorToEdit.profile_image);
+      }
+    }
+  }, [professorToEdit]);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -55,37 +74,58 @@ const AddProfessor = ({ onClose, onProfessorAdded }) => {
         professorData.append('image', selectedImage);
       }
       
-      // Make API call to server
       const API_BASE_URL = 'http://localhost:5001';
-      const response = await axios.post(`${API_BASE_URL}/api/professors`, professorData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+      let response;
+      
+      if (professorToEdit) {
+        // Update existing professor
+        response = await axios.put(`${API_BASE_URL}/api/professors/${professorToEdit.id}`, professorData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        console.log('Professor updated successfully:', response.data);
+        
+        // Notify parent component
+        if (onProfessorUpdated) {
+          onProfessorUpdated(response.data);
         }
-      });
-      
-      console.log('Professor added successfully:', response.data);
-      
-      // Notify parent component
-      if (onProfessorAdded) {
-        onProfessorAdded(response.data);
+      } else {
+        // Create new professor
+        response = await axios.post(`${API_BASE_URL}/api/professors`, professorData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        console.log('Professor added successfully:', response.data);
+        
+        // Notify parent component
+        if (onProfessorAdded) {
+          onProfessorAdded(response.data);
+        }
       }
       
       // Close the modal
       onClose();
     } catch (error) {
-      console.error('Error adding professor:', error);
-      setError(error.response?.data?.message || 'Failed to add professor. Please try again.');
+      console.error('Error saving professor:', error);
+      setError(error.response?.data?.message || 'Failed to save professor. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
   
+  const isEditMode = !!professorToEdit;
+  
   return (
     <Modal>
       <ModalContent>
         <ModalHeader>
-          <h2><FaUserTie /> Add New Professor</h2>
+          <h2><FaUserTie /> {isEditMode ? 'Edit Professor' : 'Add New Professor'}</h2>
           <CloseButton onClick={onClose}><FaTimes /></CloseButton>
         </ModalHeader>
         
@@ -191,7 +231,10 @@ const AddProfessor = ({ onClose, onProfessorAdded }) => {
           <ButtonGroup>
             <CancelButton type="button" onClick={onClose}>Cancel</CancelButton>
             <SubmitButton type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding...' : 'Add Professor'}
+              {isSubmitting 
+                ? (isEditMode ? 'Updating...' : 'Adding...') 
+                : (isEditMode ? 'Update Professor' : 'Add Professor')
+              }
             </SubmitButton>
           </ButtonGroup>
         </Form>

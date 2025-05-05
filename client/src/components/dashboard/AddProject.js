@@ -3,7 +3,7 @@ import styled from 'styled-components';
 import { FaProjectDiagram, FaTimes, FaPlus, FaTimes as FaRemove } from 'react-icons/fa';
 import axios from 'axios';
 
-const AddProject = ({ onClose, onProjectAdded }) => {
+const AddProject = ({ onClose, onProjectAdded, onProjectUpdated, projectToEdit }) => {
   const [professors, setProfessors] = useState([]);
   const [formData, setFormData] = useState({
     title: '',
@@ -22,6 +22,48 @@ const AddProject = ({ onClose, onProjectAdded }) => {
   const [newMember, setNewMember] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  
+  // Initialize form data when editing
+  useEffect(() => {
+    if (projectToEdit) {
+      // Parse technologies and members if they're stored as JSON strings
+      let technologies = [];
+      let members = [];
+      
+      if (projectToEdit.tags) {
+        try {
+          technologies = typeof projectToEdit.tags === 'string' 
+            ? JSON.parse(projectToEdit.tags) 
+            : Array.isArray(projectToEdit.tags) ? projectToEdit.tags : [];
+        } catch (e) {
+          console.error('Error parsing technologies:', e);
+        }
+      }
+      
+      if (projectToEdit.members) {
+        try {
+          members = typeof projectToEdit.members === 'string' 
+            ? JSON.parse(projectToEdit.members) 
+            : Array.isArray(projectToEdit.members) ? projectToEdit.members : [];
+        } catch (e) {
+          console.error('Error parsing members:', e);
+        }
+      }
+      
+      setFormData({
+        title: projectToEdit.title || '',
+        description: projectToEdit.description || '',
+        type: projectToEdit.category || 'Research',
+        startDate: projectToEdit.start_date ? new Date(projectToEdit.start_date).toISOString().split('T')[0] : '',
+        endDate: projectToEdit.end_date ? new Date(projectToEdit.end_date).toISOString().split('T')[0] : '',
+        professor_id: projectToEdit.professor_id || '',
+        status: projectToEdit.status || 'Ongoing',
+        technologies: technologies,
+        members: members,
+        publication_url: projectToEdit.publication_url || ''
+      });
+    }
+  }, [projectToEdit]);
   
   // Fetch professors for dropdown
   useEffect(() => {
@@ -91,37 +133,58 @@ const AddProject = ({ onClose, onProjectAdded }) => {
         members: JSON.stringify(formData.members)
       };
       
-      // Make API call to server
       const API_BASE_URL = 'http://localhost:5001';
-      const response = await axios.post(`${API_BASE_URL}/api/projects`, projectData, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+      let response;
+      
+      if (projectToEdit) {
+        // Update existing project
+        response = await axios.put(`${API_BASE_URL}/api/projects/${projectToEdit.id}`, projectData, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        console.log('Project updated successfully:', response.data);
+        
+        // Notify parent component
+        if (onProjectUpdated) {
+          onProjectUpdated(response.data);
         }
-      });
-      
-      console.log('Project added successfully:', response.data);
-      
-      // Notify parent component
-      if (onProjectAdded) {
-        onProjectAdded(response.data);
+      } else {
+        // Create new project
+        response = await axios.post(`${API_BASE_URL}/api/projects`, projectData, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        console.log('Project added successfully:', response.data);
+        
+        // Notify parent component
+        if (onProjectAdded) {
+          onProjectAdded(response.data);
+        }
       }
       
       // Close the modal
       onClose();
     } catch (error) {
-      console.error('Error adding project:', error);
-      setError(error.response?.data?.message || 'Failed to add project. Please try again.');
+      console.error('Error saving project:', error);
+      setError(error.response?.data?.message || 'Failed to save project. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
   
+  const isEditMode = !!projectToEdit;
+  
   return (
     <Modal>
       <ModalContent>
         <ModalHeader>
-          <h2><FaProjectDiagram /> Add New Project</h2>
+          <h2><FaProjectDiagram /> {isEditMode ? 'Edit Project' : 'Add New Project'}</h2>
           <CloseButton onClick={onClose}><FaTimes /></CloseButton>
         </ModalHeader>
         
@@ -299,7 +362,10 @@ const AddProject = ({ onClose, onProjectAdded }) => {
           <ButtonGroup>
             <CancelButton type="button" onClick={onClose}>Cancel</CancelButton>
             <SubmitButton type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Adding...' : 'Add Project'}
+              {isSubmitting 
+                ? (isEditMode ? 'Updating...' : 'Adding...') 
+                : (isEditMode ? 'Update Project' : 'Add Project')
+              }
             </SubmitButton>
           </ButtonGroup>
         </Form>

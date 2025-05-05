@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 import { FaTimes, FaUpload } from 'react-icons/fa';
 
-const AddCourse = ({ onClose, onCourseAdded, professors }) => {
+const AddCourse = ({ onClose, onCourseAdded, onCourseUpdated, professors, courseToEdit }) => {
   const [formData, setFormData] = useState({
     title: '',
     code: '',
@@ -18,6 +18,27 @@ const AddCourse = ({ onClose, onCourseAdded, professors }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  
+  useEffect(() => {
+    if (courseToEdit) {
+      setFormData({
+        title: courseToEdit.title || '',
+        code: courseToEdit.code || '',
+        description: courseToEdit.description || '',
+        semester: courseToEdit.semester || 'Fall',
+        year: courseToEdit.year || new Date().getFullYear(),
+        professor_id: courseToEdit.professor_id?.toString() || '',
+        syllabus_url: courseToEdit.syllabus_url || ''
+      });
+      
+      if (courseToEdit.image_url) {
+        setImagePreview(courseToEdit.image_url);
+      }
+      
+      setIsEditMode(true);
+    }
+  }, [courseToEdit]);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -59,27 +80,49 @@ const AddCourse = ({ onClose, onCourseAdded, professors }) => {
         data.append('image', image);
       }
       
-      const response = await axios.post(
-        `${API_BASE_URL}/api/courses`,
-        data,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      let response;
       
-      onCourseAdded({
-        ...formData,
-        id: response.data.courseId,
-        professor_name: professors.find(p => p.id === parseInt(formData.professor_id))?.name || null
-      });
+      if (isEditMode) {
+        response = await axios.put(
+          `${API_BASE_URL}/api/courses/${courseToEdit.id}`,
+          data,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        onCourseUpdated({
+          ...formData,
+          id: courseToEdit.id,
+          professor_name: professors.find(p => p.id === parseInt(formData.professor_id))?.name || null,
+          image_url: response.data.image_url || courseToEdit.image_url
+        });
+      } else {
+        response = await axios.post(
+          `${API_BASE_URL}/api/courses`,
+          data,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        onCourseAdded({
+          ...formData,
+          id: response.data.courseId,
+          professor_name: professors.find(p => p.id === parseInt(formData.professor_id))?.name || null
+        });
+      }
       
       onClose();
     } catch (err) {
-      console.error('Error adding course:', err);
-      setError(err.response?.data?.message || 'Failed to add course. Please try again.');
+      console.error(`Error ${isEditMode ? 'updating' : 'adding'} course:`, err);
+      setError(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'add'} course. Please try again.`);
     } finally {
       setLoading(false);
     }
@@ -89,7 +132,7 @@ const AddCourse = ({ onClose, onCourseAdded, professors }) => {
     <ModalOverlay>
       <ModalContent>
         <ModalHeader>
-          <h2>Add New Course</h2>
+          <h2>{isEditMode ? 'Edit Course' : 'Add New Course'}</h2>
           <CloseButton onClick={onClose}>
             <FaTimes />
           </CloseButton>
@@ -221,7 +264,7 @@ const AddCourse = ({ onClose, onCourseAdded, professors }) => {
               Cancel
             </CancelButton>
             <SubmitButton type="submit" disabled={loading}>
-              {loading ? 'Adding...' : 'Add Course'}
+              {loading ? (isEditMode ? 'Updating...' : 'Adding...') : (isEditMode ? 'Update Course' : 'Add Course')}
             </SubmitButton>
           </ButtonGroup>
         </Form>

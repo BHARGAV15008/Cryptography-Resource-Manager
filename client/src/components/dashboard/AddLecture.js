@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import axios from 'axios';
 import { FaTimes, FaUpload, FaPlus, FaTrash } from 'react-icons/fa';
 
-const AddLecture = ({ onClose, onLectureAdded, courses }) => {
+const AddLecture = ({ onClose, onLectureAdded, onLectureUpdated, courses, lectureToEdit }) => {
   const [formData, setFormData] = useState({
     title: '',
     course_id: '',
@@ -20,6 +20,30 @@ const AddLecture = ({ onClose, onLectureAdded, courses }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [resource, setResource] = useState({ name: '', url: '' });
+  const [isEditMode, setIsEditMode] = useState(false);
+  
+  useEffect(() => {
+    if (lectureToEdit) {
+      setFormData({
+        title: lectureToEdit.title || '',
+        course_id: lectureToEdit.course_id?.toString() || '',
+        lecture_date: lectureToEdit.lecture_date ? new Date(lectureToEdit.lecture_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        description: lectureToEdit.description || '',
+        video_url: lectureToEdit.video_url || '',
+        additional_resources: lectureToEdit.additional_resources || []
+      });
+      
+      if (lectureToEdit.slides_url) {
+        setSlidesName('Current slides file');
+      }
+      
+      if (lectureToEdit.video_url) {
+        setVideoName('Current video file');
+      }
+      
+      setIsEditMode(true);
+    }
+  }, [lectureToEdit]);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -95,27 +119,50 @@ const AddLecture = ({ onClose, onLectureAdded, courses }) => {
         data.append('video', video);
       }
       
-      const response = await axios.post(
-        `${API_BASE_URL}/api/lectures`,
-        data,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
+      let response;
       
-      onLectureAdded({
-        ...formData,
-        id: response.data.lectureId,
-        course_title: courses.find(c => c.id === parseInt(formData.course_id))?.title || null
-      });
+      if (isEditMode) {
+        response = await axios.put(
+          `${API_BASE_URL}/api/lectures/${lectureToEdit.id}`,
+          data,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        onLectureUpdated({
+          ...formData,
+          id: lectureToEdit.id,
+          course_title: courses.find(c => c.id === parseInt(formData.course_id))?.title || null,
+          slides_url: response.data.slides_url || lectureToEdit.slides_url,
+          video_url: response.data.video_url || lectureToEdit.video_url
+        });
+      } else {
+        response = await axios.post(
+          `${API_BASE_URL}/api/lectures`,
+          data,
+          {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        onLectureAdded({
+          ...formData,
+          id: response.data.lectureId,
+          course_title: courses.find(c => c.id === parseInt(formData.course_id))?.title || null
+        });
+      }
       
       onClose();
     } catch (err) {
-      console.error('Error adding lecture:', err);
-      setError(err.response?.data?.message || 'Failed to add lecture. Please try again.');
+      console.error(`Error ${isEditMode ? 'updating' : 'adding'} lecture:`, err);
+      setError(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'add'} lecture. Please try again.`);
     } finally {
       setLoading(false);
     }
@@ -125,7 +172,7 @@ const AddLecture = ({ onClose, onLectureAdded, courses }) => {
     <ModalOverlay>
       <ModalContent>
         <ModalHeader>
-          <h2>Add New Lecture</h2>
+          <h2>{isEditMode ? 'Edit Lecture' : 'Add New Lecture'}</h2>
           <CloseButton onClick={onClose}>
             <FaTimes />
           </CloseButton>
@@ -278,7 +325,7 @@ const AddLecture = ({ onClose, onLectureAdded, courses }) => {
               Cancel
             </CancelButton>
             <SubmitButton type="submit" disabled={loading}>
-              {loading ? 'Adding...' : 'Add Lecture'}
+              {loading ? (isEditMode ? 'Updating...' : 'Adding...') : (isEditMode ? 'Update Lecture' : 'Add Lecture')}
             </SubmitButton>
           </ButtonGroup>
         </Form>

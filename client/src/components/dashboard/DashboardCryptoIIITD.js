@@ -13,6 +13,8 @@ const DashboardCryptoIIITD = () => {
   const [error, setError] = useState(null);
   const [showAddProfessorModal, setShowAddProfessorModal] = useState(false);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [professorToEdit, setProfessorToEdit] = useState(null);
+  const [projectToEdit, setProjectToEdit] = useState(null);
   
   // Function to get auth header for API requests
   const getAuthHeader = () => {
@@ -31,13 +33,42 @@ const DashboardCryptoIIITD = () => {
         if (activeTab === 'professors') {
           const response = await axios.get(`${API_BASE_URL}/api/professors`, getAuthHeader());
           setProfessors(response.data);
+          
+          // Save to localStorage for persistence
+          localStorage.setItem('professors', JSON.stringify(response.data));
         } else {
           const response = await axios.get(`${API_BASE_URL}/api/projects`, getAuthHeader());
           setProjects(response.data);
+          
+          // Save to localStorage for persistence
+          localStorage.setItem('projects', JSON.stringify(response.data));
         }
       } catch (err) {
         console.error(`Error fetching ${activeTab}:`, err);
         setError(`Failed to load ${activeTab}. Please try again later.`);
+        
+        // Try to load from localStorage if API fails
+        if (activeTab === 'professors') {
+          const savedProfessors = localStorage.getItem('professors');
+          if (savedProfessors) {
+            try {
+              setProfessors(JSON.parse(savedProfessors));
+              setError(null);
+            } catch (e) {
+              console.error('Error parsing saved professors:', e);
+            }
+          }
+        } else {
+          const savedProjects = localStorage.getItem('projects');
+          if (savedProjects) {
+            try {
+              setProjects(JSON.parse(savedProjects));
+              setError(null);
+            } catch (e) {
+              console.error('Error parsing saved projects:', e);
+            }
+          }
+        }
       } finally {
         setLoading(false);
       }
@@ -48,10 +79,38 @@ const DashboardCryptoIIITD = () => {
   
   const handleProfessorAdded = (newProfessor) => {
     setProfessors(prev => [...prev, newProfessor]);
+    localStorage.setItem('professors', JSON.stringify([...professors, newProfessor]));
   };
   
   const handleProjectAdded = (newProject) => {
     setProjects(prev => [...prev, newProject]);
+    localStorage.setItem('projects', JSON.stringify([...projects, newProject]));
+  };
+  
+  const handleProfessorUpdated = (updatedProfessor) => {
+    const updatedProfessors = professors.map(prof => 
+      prof.id === updatedProfessor.id ? updatedProfessor : prof
+    );
+    setProfessors(updatedProfessors);
+    localStorage.setItem('professors', JSON.stringify(updatedProfessors));
+  };
+  
+  const handleProjectUpdated = (updatedProject) => {
+    const updatedProjects = projects.map(proj => 
+      proj.id === updatedProject.id ? updatedProject : proj
+    );
+    setProjects(updatedProjects);
+    localStorage.setItem('projects', JSON.stringify(updatedProjects));
+  };
+  
+  const handleEditProfessor = (professor) => {
+    setProfessorToEdit(professor);
+    setShowAddProfessorModal(true);
+  };
+  
+  const handleEditProject = (project) => {
+    setProjectToEdit(project);
+    setShowAddProjectModal(true);
   };
   
   const handleDeleteProfessor = async (id) => {
@@ -68,7 +127,11 @@ const DashboardCryptoIIITD = () => {
         await axios.delete(`${API_BASE_URL}/api/professors/${id}`, getAuthHeader());
         
         // Remove from local state
-        setProfessors(prev => prev.filter(professor => professor.id !== id));
+        const updatedProfessors = professors.filter(professor => professor.id !== id);
+        setProfessors(updatedProfessors);
+        
+        // Update localStorage
+        localStorage.setItem('professors', JSON.stringify(updatedProfessors));
         
         // Show success message
         alert('Professor deleted successfully');
@@ -93,7 +156,11 @@ const DashboardCryptoIIITD = () => {
         await axios.delete(`${API_BASE_URL}/api/projects/${id}`, getAuthHeader());
         
         // Remove from local state
-        setProjects(prev => prev.filter(project => project.id !== id));
+        const updatedProjects = projects.filter(project => project.id !== id);
+        setProjects(updatedProjects);
+        
+        // Update localStorage
+        localStorage.setItem('projects', JSON.stringify(updatedProjects));
         
         // Show success message
         alert('Project deleted successfully');
@@ -205,7 +272,7 @@ const DashboardCryptoIIITD = () => {
                     </ProfessorInfo>
                   )}
                   <ActionButtons>
-                    <EditButton>
+                    <EditButton onClick={() => handleEditProfessor(professor)}>
                       <FaEdit />
                       <span>Edit</span>
                     </EditButton>
@@ -285,7 +352,7 @@ const DashboardCryptoIIITD = () => {
                         </td>
                         <td>
                           <ActionButtons>
-                            <EditButton>
+                            <EditButton onClick={() => handleEditProject(project)}>
                               <FaEdit />
                               <span>Edit</span>
                             </EditButton>
@@ -307,15 +374,25 @@ const DashboardCryptoIIITD = () => {
       
       {showAddProfessorModal && (
         <AddProfessor 
-          onClose={() => setShowAddProfessorModal(false)} 
+          onClose={() => {
+            setShowAddProfessorModal(false);
+            setProfessorToEdit(null);
+          }} 
           onProfessorAdded={handleProfessorAdded}
+          onProfessorUpdated={handleProfessorUpdated}
+          professorToEdit={professorToEdit}
         />
       )}
       
       {showAddProjectModal && (
         <AddProject 
-          onClose={() => setShowAddProjectModal(false)} 
+          onClose={() => {
+            setShowAddProjectModal(false);
+            setProjectToEdit(null);
+          }} 
           onProjectAdded={handleProjectAdded}
+          onProjectUpdated={handleProjectUpdated}
+          projectToEdit={projectToEdit}
         />
       )}
     </DashboardContainer>
