@@ -5,8 +5,11 @@ import axios from 'axios';
 const CryptoIIITD = () => {
   const [professors, setProfessors] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [filteredProjects, setFilteredProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   
   // Default professor image as a data URI
   const defaultProfessorImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='120' height='120'%3E%3Cpath fill='%23e0e0e0' d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/%3E%3C/svg%3E";
@@ -34,6 +37,7 @@ const CryptoIIITD = () => {
         const response = await axios.get('http://localhost:5001/api/projects');
         console.log("Fetched projects:", response.data);
         setProjects(response.data);
+        setFilteredProjects(response.data);
         
         // Save to localStorage for persistence
         localStorage.setItem('projects', JSON.stringify(response.data));
@@ -44,7 +48,9 @@ const CryptoIIITD = () => {
         const savedProjects = localStorage.getItem('projects');
         if (savedProjects) {
           try {
-            setProjects(JSON.parse(savedProjects));
+            const parsedProjects = JSON.parse(savedProjects);
+            setProjects(parsedProjects);
+            setFilteredProjects(parsedProjects);
           } catch (e) {
             console.error('Error parsing saved projects:', e);
           }
@@ -56,6 +62,28 @@ const CryptoIIITD = () => {
 
     fetchProjects();
   }, []);
+  
+  // Apply filters when category or status changes
+  useEffect(() => {
+    if (!projects.length) return;
+    
+    let filtered = [...projects];
+    
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(project => project.category === categoryFilter);
+    }
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(project => {
+        const projectStatus = project.status || getProjectStatus(project.start_date, project.end_date);
+        return projectStatus === statusFilter;
+      });
+    }
+    
+    setFilteredProjects(filtered);
+  }, [categoryFilter, statusFilter, projects]);
 
   const getProjectStatus = (startDate, endDate) => {
     if (!endDate) return 'active';
@@ -191,13 +219,40 @@ const CryptoIIITD = () => {
 
       <ContentSection>
         <SectionTitle>Research Projects</SectionTitle>
+        
+        <FilterContainer>
+          <FilterGroup>
+            <FilterLabel>Category:</FilterLabel>
+            <FilterSelect value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+              <option value="all">All Categories</option>
+              <option value="IP">Independent Project</option>
+              <option value="IS">Independent Study</option>
+              <option value="BTP">B.Tech Project</option>
+              <option value="Capstone">Capstone Project</option>
+              <option value="Thesis">M.Tech Thesis</option>
+              <option value="Research">Research</option>
+            </FilterSelect>
+          </FilterGroup>
+          
+          <FilterGroup>
+            <FilterLabel>Status:</FilterLabel>
+            <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">All Statuses</option>
+              <option value="planning">Planning</option>
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+              <option value="archived">Archived</option>
+            </FilterSelect>
+          </FilterGroup>
+        </FilterContainer>
+        
         {loading ? (
           <LoadingMessage>Loading projects...</LoadingMessage>
-        ) : projects.length === 0 ? (
-          <EmptyMessage>No projects available at the moment.</EmptyMessage>
+        ) : filteredProjects.length === 0 ? (
+          <EmptyMessage>No projects match the selected filters.</EmptyMessage>
         ) : (
           <ProjectsContainer>
-            {projects.map((project) => {
+            {filteredProjects.map((project) => {
               // Debug logging
               console.log("Processing project:", project);
               
@@ -472,13 +527,51 @@ const LoadingMessage = styled.div`
   color: ${({ theme }) => theme.colors.textLight};
 `;
 
-const EmptyMessage = styled.div`
+const EmptyMessage = styled.p`
   text-align: center;
-  padding: 2rem;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   color: ${({ theme }) => theme.colors.textLight};
+  padding: 2rem;
   background: ${({ theme }) => theme.colors.backgroundLight};
   border-radius: 8px;
+  margin-top: 1rem;
+`;
+
+const FilterContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  background: ${({ theme }) => theme.colors.backgroundLight};
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: ${({ theme }) => theme.shadows.small};
+`;
+
+const FilterGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const FilterLabel = styled.label`
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const FilterSelect = styled.select`
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  background-color: white;
+  font-size: 0.9rem;
+  min-width: 180px;
+  
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.primary};
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  }
 `;
 
 const ProjectsContainer = styled.div`
