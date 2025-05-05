@@ -8,10 +8,19 @@ const path = require('path');
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/professors/');
+    // Ensure the directory exists
+    const fs = require('fs');
+    const dir = 'uploads/professors';
+    if (!fs.existsSync(dir)){
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    cb(null, dir);
   },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    // Create a unique filename
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, `professor-${uniqueSuffix}${ext}`);
   }
 });
 
@@ -82,9 +91,9 @@ router.get('/:id', async (req, res) => {
 });
 
 // Add new professor (admin only)
-router.post('/', auth, upload.single('image'), async (req, res) => {
+router.post('/', auth, async (req, res) => {
   try {
-    const { name, title, specialization, biography, website, email, department } = req.body;
+    const { name, title, specialization, biography, website, email, department, profile_image } = req.body;
     const userId = req.user.id;
     
     // Check if user is admin
@@ -92,9 +101,40 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
       return res.status(403).json({ message: 'Access denied. Admin or authorized users only.' });
     }
     
+    console.log('Creating professor with data:', { ...req.body, profile_image: profile_image ? 'Data URL (truncated)' : null });
+    
     let imagePath = null;
-    if (req.file) {
-      imagePath = req.file.path;
+    // Handle profile image if it's a data URL
+    if (profile_image && profile_image.startsWith('data:image')) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Create uploads directory if it doesn't exist
+        const uploadsDir = path.join(__dirname, '../public/uploads/professors');
+        
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        
+        // Generate a unique filename
+        const timestamp = Date.now();
+        const filename = `professor-${timestamp}.jpg`;
+        const filePath = path.join(uploadsDir, filename);
+        
+        // Extract the base64 data from the data URL
+        const base64Data = profile_image.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Write the file
+        fs.writeFileSync(filePath, buffer);
+        
+        // Set the image URL to the relative path
+        imagePath = `/uploads/professors/${filename}`;
+        console.log('New image path:', imagePath);
+      } catch (imageError) {
+        console.error('Error saving image:', imageError);
+      }
     }
     
     const result = await executeQuery(
@@ -102,9 +142,13 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
       [name, title, department, specialization, biography, website, email, imagePath, userId]
     );
     
+    // Fetch the newly created professor to return in the response
+    const newProfessor = await executeQuery('SELECT * FROM professors WHERE id = ?', [result.insertId]);
+    
     res.status(201).json({ 
       id: result.insertId,
-      message: 'Professor added successfully' 
+      message: 'Professor added successfully',
+      professor: newProfessor[0]
     });
   } catch (error) {
     console.error(error);
@@ -113,15 +157,18 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
 });
 
 // Update professor (admin only)
-router.put('/:id', auth, upload.single('image'), async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, title, specialization, biography, website, email, status, department } = req.body;
+    const { name, title, specialization, biography, website, email, status, department, profile_image } = req.body;
     
     // Check if user is admin
     if (req.user.role !== 'admin' && req.user.role !== 'authorised') {
       return res.status(403).json({ message: 'Access denied. Admin or authorized users only.' });
     }
+    
+    console.log('Updating professor with ID:', id);
+    console.log('Request body:', { ...req.body, profile_image: profile_image ? 'Data URL (truncated)' : null });
     
     let updateQuery = 'UPDATE professors SET name = ?, title = ?, department = ?, specialization = ?, biography = ?, website = ?, email = ?';
     let queryParams = [name, title, department, specialization, biography, website, email];
@@ -131,17 +178,57 @@ router.put('/:id', auth, upload.single('image'), async (req, res) => {
       queryParams.push(status);
     }
     
-    if (req.file) {
-      updateQuery += ', profile_image = ?';
-      queryParams.push(req.file.path);
+    // Handle profile image if it's a data URL
+    if (profile_image && profile_image.startsWith('data:image')) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Create uploads directory if it doesn't exist
+        const uploadsDir = path.join(__dirname, '../public/uploads/professors');
+        
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        
+        // Generate a unique filename
+        const timestamp = Date.now();
+        const filename = `professor-${timestamp}.jpg`;
+        const filePath = path.join(uploadsDir, filename);
+        
+        // Extract the base64 data from the data URL
+        const base64Data = profile_image.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Write the file
+        fs.writeFileSync(filePath, buffer);
+        
+        // Set the image URL to the relative path
+        const imagePath = `/uploads/professors/${filename}`;
+        console.log('New image path:', imagePath);
+        updateQuery += ', profile_image = ?';
+        queryParams.push(imagePath);
+      } catch (imageError) {
+        console.error('Error saving image:', imageError);
+      }
     }
     
     updateQuery += ' WHERE id = ?';
     queryParams.push(id);
     
-    await executeQuery(updateQuery, queryParams);
+    console.log('Update query:', updateQuery);
+    console.log('Query params:', queryParams.map(p => typeof p === 'string' && p.length > 100 ? 'Long string...' : p));
     
-    res.status(200).json({ message: 'Professor updated successfully' });
+    const result = await executeQuery(updateQuery, queryParams);
+    console.log('Update result:', result);
+    
+    // Fetch the updated professor to return in the response
+    const updatedProfessor = await executeQuery('SELECT * FROM professors WHERE id = ?', [id]);
+    
+    res.status(200).json({
+      message: 'Professor updated successfully',
+      professor: updatedProfessor[0]
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

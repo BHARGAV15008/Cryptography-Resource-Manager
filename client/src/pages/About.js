@@ -29,12 +29,17 @@ const About = () => {
     const fetchProfessors = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('/api/professors');
-        setProfessors(response.data);
+        const API_BASE_URL = 'http://localhost:5001';
+        const response = await axios.get(`${API_BASE_URL}/api/professors`);
+        
+        // Check if the response has a value property (from our API)
+        const professorsData = response.data.value || response.data;
+        console.log('Fetched professors:', professorsData);
+        setProfessors(professorsData);
         
         // Set first professor as active by default if available
-        if (response.data.length > 0) {
-          fetchProfessorDetails(response.data[0].id);
+        if (professorsData.length > 0) {
+          fetchProfessorDetails(professorsData[0].id);
         } else {
           setLoading(false);
         }
@@ -51,9 +56,15 @@ const About = () => {
   const fetchProfessorDetails = async (professorId) => {
     try {
       setLoading(true);
-      const response = await axios.get(`/api/professors/${professorId}`);
-      setActiveProfessor(response.data);
-      setProjects(response.data.projects || []);
+      const API_BASE_URL = 'http://localhost:5001';
+      const response = await axios.get(`${API_BASE_URL}/api/professors/${professorId}`);
+      
+      // Check if the response has data
+      const professorData = response.data;
+      console.log('Fetched professor details:', professorData);
+      
+      setActiveProfessor(professorData);
+      setProjects(professorData.projects || []);
       setSelectedProfessor(professorId);
       setLoading(false);
     } catch (err) {
@@ -191,7 +202,14 @@ const About = () => {
       ) : activeProfessor ? (
         <ContentContainer>
           <ProfessorCard>
-            <ProfessorImage src={activeProfessor.image_url || '/default-professor.png'} alt={activeProfessor.name} />
+            <ProfessorImage 
+              src={activeProfessor.profile_image || activeProfessor.image_url || '/default-professor.png'} 
+              alt={activeProfessor.name} 
+              onError={(e) => {
+                // If image fails to load, replace with default
+                e.target.src = '/default-professor.png';
+              }}
+            />
             <ProfessorName>{activeProfessor.name}</ProfessorName>
             <ProfessorTitle>{activeProfessor.title}</ProfessorTitle>
             <ProfessorSpecialization>{activeProfessor.specialization}</ProfessorSpecialization>

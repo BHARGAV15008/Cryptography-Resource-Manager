@@ -91,9 +91,18 @@ const DashboardCryptoIIITD = () => {
   };
   
   const handleProfessorUpdated = (updatedProfessor) => {
+    console.log('Professor updated:', updatedProfessor);
+    
+    // If the response includes the full professor object
+    if (updatedProfessor.professor) {
+      updatedProfessor = updatedProfessor.professor;
+    }
+    
     const updatedProfessors = professors.map(prof => 
-      prof.id === updatedProfessor.id ? updatedProfessor : prof
+      prof.id === updatedProfessor.id ? {...prof, ...updatedProfessor} : prof
     );
+    
+    console.log('Updated professors list:', updatedProfessors);
     setProfessors(updatedProfessors);
     localStorage.setItem('professors', JSON.stringify(updatedProfessors));
   };

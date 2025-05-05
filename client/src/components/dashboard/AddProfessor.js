@@ -64,14 +64,35 @@ const AddProfessor = ({ onClose, onProfessorAdded, onProfessorUpdated, professor
       // Create a FormData object to handle file upload
       const professorData = new FormData();
       
-      // Add all form fields to FormData
-      Object.keys(formData).forEach(key => {
-        professorData.append(key, formData[key]);
-      });
+      // Instead of using FormData for file upload, we'll use a direct approach with the data URL
+      // Create a regular object for the professor data
+      const professorDataObj = { ...formData };
       
-      // Add image if selected
+      // Handle image data
       if (selectedImage) {
-        professorData.append('image', selectedImage);
+        console.log('Processing image file...');
+        // Create a promise to read the file as data URL
+        const readFileAsDataURL = () => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsDataURL(selectedImage);
+          });
+        };
+        
+        try {
+          // Get the data URL and use it directly
+          const dataUrl = await readFileAsDataURL();
+          console.log('Image converted to data URL');
+          professorDataObj.profile_image = dataUrl;
+        } catch (readError) {
+          console.error('Error reading image file:', readError);
+        }
+      } else if (previewUrl && previewUrl.startsWith('data:')) {
+        // If we already have a data URL, use it directly
+        console.log('Using existing data URL for image');
+        professorDataObj.profile_image = previewUrl;
       }
       
       const API_BASE_URL = 'http://localhost:5001';
@@ -79,9 +100,10 @@ const AddProfessor = ({ onClose, onProfessorAdded, onProfessorUpdated, professor
       
       if (professorToEdit) {
         // Update existing professor
-        response = await axios.put(`${API_BASE_URL}/api/professors/${professorToEdit.id}`, professorData, {
+        console.log('Updating professor with data:', professorDataObj);
+        response = await axios.put(`${API_BASE_URL}/api/professors/${professorToEdit.id}`, professorDataObj, {
           headers: {
-            'Content-Type': 'multipart/form-data',
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
@@ -94,9 +116,10 @@ const AddProfessor = ({ onClose, onProfessorAdded, onProfessorUpdated, professor
         }
       } else {
         // Create new professor
-        response = await axios.post(`${API_BASE_URL}/api/professors`, professorData, {
+        console.log('Creating new professor with data:', professorDataObj);
+        response = await axios.post(`${API_BASE_URL}/api/professors`, professorDataObj, {
           headers: {
-            'Content-Type': 'multipart/form-data',
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });

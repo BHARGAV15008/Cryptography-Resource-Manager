@@ -25,9 +25,43 @@ app.use((req, res, next) => {
   next();
 });
 
-// Static file middleware for serving uploads
-app.use(express.static('uploads'));
-app.use('/uploads', express.static('uploads'));
+// Static file middleware for serving uploads and public files
+// Make sure the uploads directory is properly served
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Log when static files are requested
+app.use('/uploads', (req, res, next) => {
+  console.log(`Static file requested: ${req.url}`);
+  next();
+});
+
+// Create uploads directory if it doesn't exist
+const fs = require('fs');
+const uploadsDir = path.join(__dirname, 'uploads');
+const eventsDir = path.join(uploadsDir, 'events');
+const publicUploadsDir = path.join(__dirname, 'public', 'uploads');
+const publicEventsDir = path.join(publicUploadsDir, 'events');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('Created uploads directory');
+}
+
+if (!fs.existsSync(eventsDir)) {
+  fs.mkdirSync(eventsDir, { recursive: true });
+  console.log('Created events uploads directory');
+}
+
+if (!fs.existsSync(publicUploadsDir)) {
+  fs.mkdirSync(publicUploadsDir, { recursive: true });
+  console.log('Created public uploads directory');
+}
+
+if (!fs.existsSync(publicEventsDir)) {
+  fs.mkdirSync(publicEventsDir, { recursive: true });
+  console.log('Created public events uploads directory');
+}
 
 // Rate limiting
 const limiter = rateLimit({
@@ -143,6 +177,8 @@ try {
   console.log('Registered /api/auth route');
   app.use('/api/users', require('./routes/users'));
   console.log('Registered /api/users route');
+  app.use('/api/upload', require('./routes/upload'));
+  console.log('Registered /api/upload route');
   app.use('/api/articles', require('./routes/articles'));
   console.log('Registered /api/articles route');
   app.use('/api/news', require('./routes/hackerNewsArticles'));

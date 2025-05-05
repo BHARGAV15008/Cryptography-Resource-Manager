@@ -15,8 +15,10 @@ const CryptoIIITD = () => {
     const fetchProfessors = async () => {
       try {
         const response = await axios.get('http://localhost:5001/api/professors');
-        setProfessors(response.data);
-        console.log("Fetched professors:", response.data);
+        // Check if the response has a value property (from our API)
+        const professorsData = response.data.value || response.data;
+        setProfessors(professorsData);
+        console.log("Fetched professors:", professorsData);
       } catch (error) {
         console.error('Error fetching professors:', error);
       }
@@ -164,7 +166,7 @@ const CryptoIIITD = () => {
           {professors.map((professor) => (
             <ProfessorItem key={professor.id}>
               <ProfessorImage 
-                src={professor.image_url || defaultProfessorImage} 
+                src={professor.profile_image || professor.image_url || defaultProfessorImage} 
                 alt={professor.name}
                 onError={(e) => {
                   e.target.onerror = null;

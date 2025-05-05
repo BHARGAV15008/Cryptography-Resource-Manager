@@ -67,7 +67,8 @@ router.post('/', async (req, res) => {
       course_id: req.body.course_id,
       lecture_no: req.body.lecture_no,
       lecture_date: req.body.lecture_date,
-      slides_url: req.body.slides_url
+      slides_url: req.body.slides_url,
+      course_code: req.body.course_code // Add course_code field
     });
     
     const lecture = await newLecture.save();

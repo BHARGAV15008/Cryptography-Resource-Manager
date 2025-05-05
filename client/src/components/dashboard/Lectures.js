@@ -13,7 +13,8 @@ const Lectures = () => {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [newCourse, setNewCourse] = useState({ 
     name: '', 
-    description: ''
+    description: '',
+    code: ''
   });
   const [newLecture, setNewLecture] = useState({
     courseId: '',
@@ -124,7 +125,7 @@ const Lectures = () => {
       const courseData = {
         title: newCourse.name,
         description: newCourse.description,
-        code: `CRYPT${Math.floor(Math.random() * 1000)}`,
+        code: newCourse.code || `CRYPT${Math.floor(Math.random() * 1000)}`, // Use provided code or generate one
         professor_name: 'TBD'
       };
       
@@ -178,7 +179,8 @@ const Lectures = () => {
     setEditingCourse(course);
     setNewCourse({
       name: course.title || course.name,
-      description: course.description
+      description: course.description,
+      code: course.code || ''
     });
     setShowAddCourse(true);
   };
@@ -219,6 +221,10 @@ const Lectures = () => {
         return;
       }
       
+      // Find the selected course to get its code
+      const selectedCourse = courses.find(course => course.id === parseInt(newLecture.courseId));
+      const courseCode = selectedCourse ? selectedCourse.code : '';
+      
       // Prepare lecture data for API
       const lectureData = {
         title: newLecture.topic,
@@ -227,6 +233,8 @@ const Lectures = () => {
         lecture_date: newLecture.date || new Date().toISOString().split('T')[0],
         description: newLecture.notes?.content || 'Lecture notes',
         slides_url: newLecture.slides_url || '',
+        // Include course code
+        course_code: courseCode,
         // Add fields expected by the server
         category: 'Cryptography',
         instructor: 'TBD',
@@ -371,7 +379,7 @@ const Lectures = () => {
               {courses.map(course => (
                 <CourseCard key={course.id}>
                   <CourseHeader>
-                    <h3>{course.title || course.name}</h3>
+                    <h3>{course.title || course.name} {course.code && <span>({course.code})</span>}</h3>
                     <CourseActions>
                       <ActionButton onClick={() => handleEditCourse(course)} title="Edit course">
                         <FiEdit />
@@ -383,7 +391,6 @@ const Lectures = () => {
                   </CourseHeader>
                   <CourseDescription>{course.description || 'No description available'}</CourseDescription>
                   <CourseFooter>
-                    <CourseCode>{course.code || 'No code'}</CourseCode>
                     <AddLectureButton 
                       onClick={() => {
                         setNewLecture(prev => ({ ...prev, courseId: course.id }));
@@ -402,15 +409,19 @@ const Lectures = () => {
                         <p>No lectures for this course yet.</p>
                       </EmptyState>
                     ) : (
-                      lectures
-                        .filter(lecture => lecture.course_id === course.id || lecture.courseId === course.id)
-                        .map(lecture => (
+                      <div className="lectures-container">
+                        {lectures
+                          .filter(lecture => lecture.course_id === course.id || lecture.courseId === course.id)
+                          .map(lecture => (
                           <LectureItem key={lecture.id}>
                             <LectureInfo>
                               <LectureTitle>
                                 {(lecture.lecture_no || lecture.lectureNo) && <span>#{lecture.lecture_no || lecture.lectureNo}:</span>} {lecture.title || lecture.topic}
                               </LectureTitle>
-                              <LectureDate>{formatDate(lecture.lecture_date || lecture.date)}</LectureDate>
+                              <LectureDate>
+                                {formatDate(lecture.lecture_date || lecture.date)}
+                                {lecture.course_code && <span className="course-code"> | {lecture.course_code}</span>}
+                              </LectureDate>
                             </LectureInfo>
                             <LectureActions>
                               {(lecture.slides_url || (lecture.notes && lecture.notes.content)) && (
@@ -426,7 +437,8 @@ const Lectures = () => {
                               </ActionButton>
                             </LectureActions>
                           </LectureItem>
-                        ))
+                        ))}
+                      </div>
                     )}
                   </LecturesList>
                 </CourseCard>
@@ -444,7 +456,7 @@ const Lectures = () => {
               <CloseButton onClick={() => {
                 setShowAddCourse(false);
                 setEditingCourse(null);
-                setNewCourse({ name: '', description: '' });
+                setNewCourse({ name: '', description: '', code: '' });
               }}>×</CloseButton>
             </ModalHeader>
             <ModalBody>
@@ -457,6 +469,16 @@ const Lectures = () => {
                   onChange={(e) => setNewCourse({ ...newCourse, name: e.target.value })}
                   placeholder="Enter course name"
                   required
+                />
+              </FormGroup>
+              <FormGroup>
+                <label htmlFor="courseCode">Course Code:</label>
+                <input
+                  id="courseCode"
+                  type="text"
+                  value={newCourse.code}
+                  onChange={(e) => setNewCourse({ ...newCourse, code: e.target.value })}
+                  placeholder="Enter course code (e.g., CS101)"
                 />
               </FormGroup>
               <FormGroup>
@@ -474,7 +496,7 @@ const Lectures = () => {
               <CancelButton onClick={() => {
                 setShowAddCourse(false);
                 setEditingCourse(null);
-                setNewCourse({ name: '', description: '' });
+                setNewCourse({ name: '', description: '', code: '' });
               }}>
                 Cancel
               </CancelButton>
@@ -745,7 +767,7 @@ const AddButton = styled.button`
 
 const CoursesGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
   gap: 2rem;
 `;
 
@@ -754,6 +776,11 @@ const CourseCard = styled.div`
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  width: 100%;
+  height: 500px; /* Increased fixed height */
+  display: flex;
+  flex-direction: column;
+  position: relative; /* For absolute positioning of children if needed */
 `;
 
 const CourseHeader = styled.div`
@@ -768,6 +795,13 @@ const CourseHeader = styled.div`
     margin: 0;
     color: #333;
     font-size: 1.2rem;
+    
+    span {
+      font-size: 0.9rem;
+      color: #666;
+      font-weight: normal;
+      margin-left: 0.5rem;
+    }
   }
 `;
 
@@ -844,13 +878,47 @@ const AddLectureButton = styled.button`
 `;
 
 const LecturesList = styled.div`
-  padding: 1rem 1.5rem;
-  border-top: 1px solid #eee;
+  padding: 0 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* Take up remaining space */
+  overflow: hidden; /* Prevent overflow outside the container */
   
   h4 {
-    margin: 0 0 1rem 0;
-    color: #333;
+    margin-top: 0;
+    margin-bottom: 1rem;
+    color: #555;
     font-size: 1rem;
+  }
+  
+  .lectures-container {
+    overflow-y: auto;
+    max-height: 300px; /* Increased height */
+    padding-right: 8px;
+    display: flex;
+    flex-direction: column;
+    
+    /* Force scrollbar to appear */
+    min-height: 150px;
+    overflow-y: auto; /* Changed from scroll to auto to only show scrollbar when needed */
+    margin-bottom: 10px; /* Add some space at the bottom */
+    
+    &::-webkit-scrollbar {
+      width: 8px; /* Slightly wider scrollbar */
+    
+    &::-webkit-scrollbar-track {
+      background: #f1f1f1;
+      border-radius: 10px;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: #ccc;
+      border-radius: 10px;
+    }
+    
+    &::-webkit-scrollbar-thumb:hover {
+      background: #aaa;
+    }
   }
 `;
 
@@ -860,6 +928,8 @@ const LectureItem = styled.div`
   align-items: center;
   padding: 0.75rem 0;
   border-bottom: 1px solid #eee;
+  min-height: 60px; /* Fixed minimum height for each lecture item */
+  width: 100%;
   
   &:last-child {
     border-bottom: none;
@@ -867,24 +937,33 @@ const LectureItem = styled.div`
 `;
 
 const LectureInfo = styled.div`
-  flex: 1;
+flex: 1;
 `;
 
 const LectureTitle = styled.div`
-  font-weight: 500;
-  color: #333;
-  margin-bottom: 0.25rem;
+font-weight: 500;
+color: #333;
+margin-bottom: 0.25rem;
   
-  span {
-    color: #888;
-    font-weight: normal;
-    margin-right: 0.25rem;
-  }
+span {
+  color: #888;
+  font-weight: normal;
+  margin-right: 0.25rem;
+}
 `;
 
 const LectureDate = styled.div`
-  font-size: 0.8rem;
-  color: #888;
+font-size: 0.8rem;
+color: #888;
+
+.course-code {
+  font-weight: 500;
+  color: #666;
+  background-color: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 3px;
+  margin-left: 5px;
+}
 `;
 
 const LectureActions = styled.div`

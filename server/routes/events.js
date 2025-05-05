@@ -263,6 +263,53 @@ router.post('/', async (req, res) => {
     // Format dates
     const formattedStartDate = new Date(startDate);
     const formattedEndDate = endDate ? new Date(endDate) : new Date(formattedStartDate.getTime() + 24 * 60 * 60 * 1000);
+    
+    // Handle image URL - if it's a data URL, we'll save it to a file
+    let finalImageUrl = imageUrl;
+    if (imageUrl && imageUrl.startsWith('data:image')) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Save to the public directory instead
+        const publicDir = path.join(__dirname, '../public');
+        const uploadsDir = path.join(publicDir, 'uploads');
+        const eventsDir = path.join(uploadsDir, 'events');
+        
+        // Ensure all directories exist
+        if (!fs.existsSync(publicDir)) {
+          fs.mkdirSync(publicDir, { recursive: true });
+        }
+        
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        
+        if (!fs.existsSync(eventsDir)) {
+          fs.mkdirSync(eventsDir, { recursive: true });
+        }
+        
+        // Generate a unique filename
+        const timestamp = Date.now();
+        const filename = `event_${timestamp}.jpg`;
+        const filePath = path.join(eventsDir, filename);
+        
+        // Extract the base64 data from the data URL
+        const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Write the file
+        fs.writeFileSync(filePath, buffer);
+        
+        // Set the image URL to the relative path (this will be much shorter than the data URL)
+        finalImageUrl = `/uploads/events/${filename}`;
+        console.log('Saved image to:', filePath);
+        console.log('Image URL set to:', finalImageUrl);
+      } catch (imageError) {
+        console.error('Error saving image:', imageError);
+        // Continue with the event creation even if image saving fails
+      }
+    }
 
     console.log('Creating event with data:', {
       title,
@@ -273,7 +320,7 @@ router.post('/', async (req, res) => {
       organizerName: organizerName || null,
       organizerEmail: organizerEmail || null,
       eventType: eventType || 'conference',
-      imageUrl: imageUrl || null
+      imageUrl: finalImageUrl || null
     });
 
     const connection = await getConnection();
@@ -299,7 +346,7 @@ router.post('/', async (req, res) => {
         location || null,
         organizerName || null,
         eventType || 'conference',
-        imageUrl || null,
+        finalImageUrl || null,
         'pending'
       ]
     );
@@ -371,6 +418,53 @@ router.put('/:id', async (req, res) => {
 
     const formattedStartDate = formatDate(startDate);
     const formattedEndDate = formatDate(endDate);
+    
+    // Handle image URL - if it's a data URL, we'll save it to a file
+    let finalImageUrl = imageUrl;
+    if (imageUrl && imageUrl.startsWith('data:image')) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Save to the public directory instead
+        const publicDir = path.join(__dirname, '../public');
+        const uploadsDir = path.join(publicDir, 'uploads');
+        const eventsDir = path.join(uploadsDir, 'events');
+        
+        // Ensure all directories exist
+        if (!fs.existsSync(publicDir)) {
+          fs.mkdirSync(publicDir, { recursive: true });
+        }
+        
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        
+        if (!fs.existsSync(eventsDir)) {
+          fs.mkdirSync(eventsDir, { recursive: true });
+        }
+        
+        // Generate a unique filename
+        const timestamp = Date.now();
+        const filename = `event_${timestamp}.jpg`;
+        const filePath = path.join(eventsDir, filename);
+        
+        // Extract the base64 data from the data URL
+        const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // Write the file
+        fs.writeFileSync(filePath, buffer);
+        
+        // Set the image URL to the relative path (this will be much shorter than the data URL)
+        finalImageUrl = `/uploads/events/${filename}`;
+        console.log('Saved image to:', filePath);
+        console.log('Image URL set to:', finalImageUrl);
+      } catch (imageError) {
+        console.error('Error saving image:', imageError);
+        // Continue with the event update even if image saving fails
+      }
+    }
 
     const connection = await getConnection();
     
@@ -396,7 +490,7 @@ router.put('/:id', async (req, res) => {
       organizerName || null,
       organizerEmail || null,  // Using organizerEmail (camelCase) to match the variable name
       eventType || null,
-      imageUrl || null,
+      finalImageUrl || null,  // Using our processed image URL
       id
     ];
     
@@ -426,7 +520,7 @@ router.put('/:id', async (req, res) => {
         location || null,
         organizerName || null,
         eventType || null,
-        imageUrl || null,
+        finalImageUrl || null,  // Using our processed image URL
         id
       ];
       

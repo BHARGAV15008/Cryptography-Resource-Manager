@@ -77,18 +77,32 @@ const AddEvent = ({ onClose, onEventAdded, onEventUpdated, isEditing = false, ev
       let imageUrl = formData.imageUrl;
 
       if (selectedImage) {
-        // Create FormData for image upload
-        const imageData = new FormData();
-        imageData.append('image', selectedImage);
-
-        // Upload image first
-        const uploadResponse = await axios.post('/api/upload', imageData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
+        // For now, let's use a direct URL approach instead of uploading
+        // This is a temporary workaround until we fix the upload endpoint
+        const reader = new FileReader();
+        
+        // Create a promise to handle the FileReader async operation
+        const readFileAsDataURL = new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Failed to read file'));
+          reader.readAsDataURL(selectedImage);
         });
-
-        imageUrl = uploadResponse.data.url;
+        
+        try {
+          // Get the data URL of the image
+          const dataUrl = await readFileAsDataURL;
+          console.log('Using data URL for image');
+          
+          // Use the data URL directly as the image URL
+          imageUrl = dataUrl;
+        } catch (readError) {
+          console.error('Error reading image file:', readError);
+          throw new Error('Failed to process image: ' + (readError.message || 'Unknown error'));
+        }
+      } else if (previewUrl && previewUrl.startsWith('data:')) {
+        // If we already have a data URL, use it directly
+        console.log('Using existing data URL for image');
+        imageUrl = previewUrl;
       }
 
       // Create event with image URL
