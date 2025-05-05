@@ -32,7 +32,7 @@ const upload = multer({
 router.get('/', async (req, res) => {
   try {
     const projects = await executeQuery(`
-      SELECT p.*, CONCAT(u.name, ' ', u.surname) as creator_name 
+      SELECT p.*, u.name as creator_name 
       FROM projects p 
       LEFT JOIN users u ON p.created_by = u.id
       ORDER BY p.created_at DESC
@@ -49,7 +49,7 @@ router.get('/type/:type', async (req, res) => {
   try {
     const { type } = req.params;
     const projects = await executeQuery(`
-      SELECT p.*, CONCAT(u.name, ' ', u.surname) as creator_name 
+      SELECT p.*, u.name as creator_name 
       FROM projects p 
       LEFT JOIN users u ON p.created_by = u.id
       WHERE p.type = ?
@@ -67,7 +67,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const projects = await executeQuery(`
-      SELECT p.*, CONCAT(u.name, ' ', u.surname) as creator_name 
+      SELECT p.*, u.name as creator_name 
       FROM projects p 
       LEFT JOIN users u ON p.created_by = u.id
       WHERE p.id = ?
@@ -87,7 +87,7 @@ router.get('/:id', async (req, res) => {
 // Add new project (admin only)
 router.post('/', auth, upload.single('file'), async (req, res) => {
   try {
-    const { title, description, type, url } = req.body;
+    const { title, description, type, startDate, endDate, professor_id, status, technologies, members, publication_url } = req.body;
     const createdBy = req.user.id;
     
     // Check if user is admin
@@ -100,9 +100,19 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       filePath = req.file.path;
     }
     
+    // Convert arrays to JSON strings for database storage
+    const membersJson = members ? JSON.stringify(members) : JSON.stringify([]);
+    const techJson = technologies ? JSON.stringify(technologies) : JSON.stringify([]);
+    
+    // Ensure status is one of the valid enum values: 'planning', 'active', 'completed', 'archived'
+    const validStatus = ['planning', 'active', 'completed', 'archived'].includes(status) 
+      ? status 
+      : 'planning';
+      
+    // Save project without leader_id to avoid foreign key constraint error
     const result = await executeQuery(
-      'INSERT INTO projects (title, description, type, url, file_path, created_by) VALUES (?, ?, ?, ?, ?, ?)',
-      [title, description, type, url, filePath, createdBy]
+      'INSERT INTO projects (title, description, status, start_date, end_date, category, team_members, tags, website, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [title, description, validStatus, startDate || null, endDate || null, type || 'Research', membersJson, techJson, publication_url || null, createdBy]
     );
     
     res.status(201).json({ 
@@ -119,15 +129,25 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 router.put('/:id', auth, upload.single('file'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, type, url } = req.body;
+    const { title, description, type, startDate, endDate, professor_id, status, technologies, members, publication_url } = req.body;
     
     // Check if user is admin
     if (req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Access denied. Admin only.' });
     }
     
-    let updateQuery = 'UPDATE projects SET title = ?, description = ?, type = ?, url = ?';
-    let queryParams = [title, description, type, url];
+    // Convert arrays to JSON strings for database storage
+    const membersJson = members ? JSON.stringify(members) : JSON.stringify([]);
+    const techJson = technologies ? JSON.stringify(technologies) : JSON.stringify([]);
+    
+    // Ensure status is one of the valid enum values: 'planning', 'active', 'completed', 'archived'
+    const validStatus = ['planning', 'active', 'completed', 'archived'].includes(status) 
+      ? status 
+      : 'planning';
+      
+    // Update leader_id with professor_id
+    let updateQuery = 'UPDATE projects SET title = ?, description = ?, status = ?, start_date = ?, end_date = ?, category = ?, team_members = ?, tags = ?, website = ?';
+    let queryParams = [title, description, validStatus, startDate || null, endDate || null, type || 'Research', membersJson, techJson, publication_url || null];
     
     if (req.file) {
       updateQuery += ', file_path = ?';

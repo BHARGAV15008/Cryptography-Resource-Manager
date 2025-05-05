@@ -85,7 +85,16 @@ const Navbar = () => {
                   <NavLink to="/resources?type=book">Reference Books</NavLink>
                 </DropdownItem>
                 <DropdownItem>
-                  <NavLink to="/resources?type=citation">Citations</NavLink>
+                  <NavLink to="/resources?type=pdf">PDFs</NavLink>
+                </DropdownItem>
+                <DropdownItem>
+                  <NavLink to="/resources?type=article">Articles</NavLink>
+                </DropdownItem>
+                <DropdownItem>
+                  <NavLink to="/resources?type=document">Documents</NavLink>
+                </DropdownItem>
+                <DropdownItem>
+                  <NavLink to="/resources">All Resources</NavLink>
                 </DropdownItem>
               </Dropdown>
             </NavItem>

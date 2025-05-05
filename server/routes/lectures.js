@@ -1,125 +1,253 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
-const admin = require('../middleware/admin');
-const Lecture = require('../models/Lecture');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { executeQuery } = require('../config/db');
+const { verifyToken } = require('../middleware/auth');
+const { attachPermissions } = require('../middleware/permissions');
 
-// @route   GET api/lectures
-// @desc    Get all lectures
-// @access  Public
-router.get('/', async (req, res) => {
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../uploads/lectures');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for slides and videos
+  fileFilter: (req, file, cb) => {
+    const filetypes = /jpeg|jpg|png|pdf|ppt|pptx|mp4|webm/;
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = filetypes.test(file.mimetype);
+    if (extname && mimetype) {
+      return cb(null, true);
+    }
+    cb(new Error('Only .jpeg, .jpg, .png, .pdf, .ppt, .pptx, .mp4, and .webm files are allowed'));
+  }
+});
+
+// GET all lectures
+router.get('/', verifyToken, async (req, res) => {
   try {
-    const lectures = await Lecture.find().sort({ createdAt: -1 });
+    const lectures = await executeQuery(`
+      SELECT l.*, c.title as course_title 
+      FROM lectures l
+      LEFT JOIN courses c ON l.course_id = c.id
+      ORDER BY l.lecture_date DESC
+    `);
+    
     res.json(lectures);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
+    console.error('Error fetching lectures:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
-// @route   GET api/lectures/:id
-// @desc    Get lecture by ID
-// @access  Public
-router.get('/:id', async (req, res) => {
+// GET lectures by course ID
+router.get('/course/:courseId', verifyToken, async (req, res) => {
   try {
-    const lecture = await Lecture.findById(req.params.id);
-    
-    if (!lecture) {
-      return res.status(404).json({ msg: 'Lecture not found' });
-    }
-    
-    res.json(lecture);
-  } catch (err) {
-    console.error(err.message);
-    if (err.kind === 'ObjectId') {
-      return res.status(404).json({ msg: 'Lecture not found' });
-    }
-    res.status(500).send('Server Error');
-  }
-});
-
-// @route   POST api/lectures
-// @desc    Create a lecture
-// @access  Private (Admin only)
-router.post('/', [auth, admin], async (req, res) => {
-  const { 
-    title, 
-    description, 
-    category, 
-    instructor, 
-    videoUrl, 
-    thumbnail, 
-    downloadUrl,
-    duration 
-  } = req.body;
-  
-  try {
-    const newLecture = new Lecture({
-      title,
-      description,
-      category,
-      instructor,
-      videoUrl,
-      thumbnail,
-      downloadUrl,
-      duration,
-      createdBy: req.user.id
-    });
-    
-    const lecture = await newLecture.save();
-    res.json(lecture);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server Error');
-  }
-});
-
-// @route   PUT api/lectures/:id
-// @desc    Update a lecture
-// @access  Private (Admin only)
-router.put('/:id', [auth, admin], async (req, res) => {
-  try {
-    let lecture = await Lecture.findById(req.params.id);
-    
-    if (!lecture) {
-      return res.status(404).json({ msg: 'Lecture not found' });
-    }
-    
-    lecture = await Lecture.findByIdAndUpdate(
-      req.params.id,
-      { $set: req.body },
-      { new: true }
+    const lectures = await executeQuery(
+      'SELECT * FROM lectures WHERE course_id = ? ORDER BY lecture_date ASC',
+      [req.params.courseId]
     );
     
-    res.json(lecture);
+    res.json(lectures);
   } catch (err) {
-    console.error(err.message);
-    if (err.kind === 'ObjectId') {
-      return res.status(404).json({ msg: 'Lecture not found' });
-    }
-    res.status(500).send('Server Error');
+    console.error('Error fetching course lectures:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
-// @route   DELETE api/lectures/:id
-// @desc    Delete a lecture
-// @access  Private (Admin only)
-router.delete('/:id', [auth, admin], async (req, res) => {
+// GET lecture by ID
+router.get('/:id', verifyToken, async (req, res) => {
   try {
-    const lecture = await Lecture.findById(req.params.id);
+    const [lecture] = await executeQuery(
+      'SELECT l.*, c.title as course_title FROM lectures l LEFT JOIN courses c ON l.course_id = c.id WHERE l.id = ?',
+      [req.params.id]
+    );
     
     if (!lecture) {
-      return res.status(404).json({ msg: 'Lecture not found' });
+      return res.status(404).json({ message: 'Lecture not found' });
     }
     
-    await lecture.remove();
-    res.json({ msg: 'Lecture removed' });
+    res.json(lecture);
   } catch (err) {
-    console.error(err.message);
-    if (err.kind === 'ObjectId') {
-      return res.status(404).json({ msg: 'Lecture not found' });
+    console.error('Error fetching lecture:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// POST create a new lecture
+router.post('/', verifyToken, attachPermissions, upload.fields([
+  { name: 'slides', maxCount: 1 },
+  { name: 'video', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    if (!req.permissions.includes('manage_lectures')) {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
     }
-    res.status(500).send('Server Error');
+    
+    const { title, course_id, lecture_date, description, video_url, additional_resources } = req.body;
+    const createdBy = req.user.id;
+    
+    let slidesUrl = null;
+    let videoUrl = video_url || null;
+    
+    if (req.files) {
+      if (req.files.slides) {
+        slidesUrl = `/uploads/lectures/${req.files.slides[0].filename}`;
+      }
+      
+      if (req.files.video && !video_url) {
+        videoUrl = `/uploads/lectures/${req.files.video[0].filename}`;
+      }
+    }
+    
+    // Parse additional resources if provided
+    let resourcesJson = null;
+    if (additional_resources) {
+      try {
+        resourcesJson = JSON.stringify(JSON.parse(additional_resources));
+      } catch (e) {
+        resourcesJson = JSON.stringify([]);
+      }
+    }
+    
+    const result = await executeQuery(
+      'INSERT INTO lectures (title, course_id, lecture_date, description, slides_url, video_url, additional_resources, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [title, course_id, lecture_date || null, description, slidesUrl, videoUrl, resourcesJson, createdBy]
+    );
+    
+    res.status(201).json({ 
+      message: 'Lecture created successfully',
+      lectureId: result.insertId
+    });
+  } catch (err) {
+    console.error('Error creating lecture:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// PUT update a lecture
+router.put('/:id', verifyToken, attachPermissions, upload.fields([
+  { name: 'slides', maxCount: 1 },
+  { name: 'video', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    if (!req.permissions.includes('manage_lectures')) {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+    
+    const { title, course_id, lecture_date, description, video_url, additional_resources } = req.body;
+    
+    // Parse additional resources if provided
+    let resourcesJson = null;
+    if (additional_resources) {
+      try {
+        resourcesJson = JSON.stringify(JSON.parse(additional_resources));
+      } catch (e) {
+        resourcesJson = JSON.stringify([]);
+      }
+    }
+    
+    let updateQuery = 'UPDATE lectures SET title = ?, course_id = ?, lecture_date = ?, description = ?, additional_resources = ?';
+    let queryParams = [title, course_id, lecture_date || null, description, resourcesJson];
+    
+    // Handle video URL update
+    if (video_url) {
+      updateQuery += ', video_url = ?';
+      queryParams.push(video_url);
+    }
+    
+    // Handle file uploads
+    if (req.files) {
+      // Get old lecture to delete old files if needed
+      const [oldLecture] = await executeQuery('SELECT slides_url, video_url FROM lectures WHERE id = ?', [req.params.id]);
+      
+      // Handle slides upload
+      if (req.files.slides) {
+        updateQuery += ', slides_url = ?';
+        queryParams.push(`/uploads/lectures/${req.files.slides[0].filename}`);
+        
+        // Delete old slides if exists
+        if (oldLecture && oldLecture.slides_url) {
+          const oldSlidesPath = path.join(__dirname, '..', oldLecture.slides_url);
+          if (fs.existsSync(oldSlidesPath)) {
+            fs.unlinkSync(oldSlidesPath);
+          }
+        }
+      }
+      
+      // Handle video upload
+      if (req.files.video && !video_url) {
+        updateQuery += ', video_url = ?';
+        queryParams.push(`/uploads/lectures/${req.files.video[0].filename}`);
+        
+        // Delete old video if exists and is a local file
+        if (oldLecture && oldLecture.video_url && oldLecture.video_url.startsWith('/uploads')) {
+          const oldVideoPath = path.join(__dirname, '..', oldLecture.video_url);
+          if (fs.existsSync(oldVideoPath)) {
+            fs.unlinkSync(oldVideoPath);
+          }
+        }
+      }
+    }
+    
+    updateQuery += ' WHERE id = ?';
+    queryParams.push(req.params.id);
+    
+    await executeQuery(updateQuery, queryParams);
+    
+    res.json({ message: 'Lecture updated successfully' });
+  } catch (err) {
+    console.error('Error updating lecture:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// DELETE a lecture
+router.delete('/:id', verifyToken, attachPermissions, async (req, res) => {
+  try {
+    if (!req.permissions.includes('manage_lectures')) {
+      return res.status(403).json({ message: 'Access denied. Admin only.' });
+    }
+    
+    // Get lecture to delete its files if exists
+    const [lecture] = await executeQuery('SELECT slides_url, video_url FROM lectures WHERE id = ?', [req.params.id]);
+    
+    // Delete the lecture
+    await executeQuery('DELETE FROM lectures WHERE id = ?', [req.params.id]);
+    
+    // Delete the slides file if exists
+    if (lecture && lecture.slides_url) {
+      const slidesPath = path.join(__dirname, '..', lecture.slides_url);
+      if (fs.existsSync(slidesPath)) {
+        fs.unlinkSync(slidesPath);
+      }
+    }
+    
+    // Delete the video file if exists and is a local file
+    if (lecture && lecture.video_url && lecture.video_url.startsWith('/uploads')) {
+      const videoPath = path.join(__dirname, '..', lecture.video_url);
+      if (fs.existsSync(videoPath)) {
+        fs.unlinkSync(videoPath);
+      }
+    }
+    
+    res.json({ message: 'Lecture deleted successfully' });
+  } catch (err) {
+    console.error('Error deleting lecture:', err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

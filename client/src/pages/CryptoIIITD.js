@@ -5,13 +5,23 @@ import axios from 'axios';
 const CryptoIIITD = () => {
   const [professors, setProfessors] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [selectedProject, setSelectedProject] = useState(null);
+  const [filteredProjects, setFilteredProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  
+  // Default professor image as a data URI
+  const defaultProfessorImage = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='120' height='120'%3E%3Cpath fill='%23e0e0e0' d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z'/%3E%3C/svg%3E";
 
   useEffect(() => {
     const fetchProfessors = async () => {
       try {
-        const response = await axios.get('/api/professors');
-        setProfessors(response.data);
+        const response = await axios.get('http://localhost:5001/api/professors');
+        // Check if the response has a value property (from our API)
+        const professorsData = response.data.value || response.data;
+        setProfessors(professorsData);
+        console.log("Fetched professors:", professorsData);
       } catch (error) {
         console.error('Error fetching professors:', error);
       }
@@ -23,25 +33,100 @@ const CryptoIIITD = () => {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const response = await axios.get('/api/projects');
+        setLoading(true);
+        const response = await axios.get('http://localhost:5001/api/projects');
+        console.log("Fetched projects:", response.data);
         setProjects(response.data);
+        setFilteredProjects(response.data);
+        
+        // Save to localStorage for persistence
+        localStorage.setItem('projects', JSON.stringify(response.data));
       } catch (error) {
         console.error('Error fetching projects:', error);
+        
+        // Try to load from localStorage if API fails
+        const savedProjects = localStorage.getItem('projects');
+        if (savedProjects) {
+          try {
+            const parsedProjects = JSON.parse(savedProjects);
+            setProjects(parsedProjects);
+            setFilteredProjects(parsedProjects);
+          } catch (e) {
+            console.error('Error parsing saved projects:', e);
+          }
+        }
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchProjects();
   }, []);
-
-  const handleProjectSelect = (event) => {
-    const project = projects.find(p => p.id === event.target.value);
-    setSelectedProject(project);
-  };
+  
+  // Apply filters when category or status changes
+  useEffect(() => {
+    if (!projects.length) return;
+    
+    let filtered = [...projects];
+    
+    // Apply category filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(project => project.category === categoryFilter);
+    }
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(project => {
+        const projectStatus = project.status || getProjectStatus(project.start_date, project.end_date);
+        return projectStatus === statusFilter;
+      });
+    }
+    
+    setFilteredProjects(filtered);
+  }, [categoryFilter, statusFilter, projects]);
 
   const getProjectStatus = (startDate, endDate) => {
+    if (!endDate) return 'active';
+    
     const now = new Date();
     const end = new Date(endDate);
-    return now > end ? 'Completed' : 'Ongoing';
+    return now > end ? 'completed' : 'active';
+  };
+  
+  // Function to parse JSON strings
+  const parseJsonField = (field) => {
+    if (!field) return [];
+    
+    try {
+      if (typeof field === 'string') {
+        // Try to parse as JSON
+        const parsed = JSON.parse(field);
+        return Array.isArray(parsed) ? parsed : [parsed];
+      } else if (Array.isArray(field)) {
+        return field;
+      } else if (typeof field === 'object') {
+        return [field];
+      }
+      return [];
+    } catch (e) {
+      console.error('Error parsing field:', e, field);
+      // If it's a string but not valid JSON, return it as a single item array
+      return typeof field === 'string' ? [field] : [];
+    }
+  };
+  
+  // Find professor by ID
+  const findProfessorById = (id) => {
+    if (!id) return { name: 'Unknown' };
+    
+    // Try to match by string or number ID
+    const professor = professors.find(prof => {
+      return prof.id === id || 
+             prof.id === parseInt(id) || 
+             prof.id?.toString() === id?.toString();
+    });
+    
+    return professor || { name: 'Unknown' };
   };
 
   return (
@@ -109,8 +194,12 @@ const CryptoIIITD = () => {
           {professors.map((professor) => (
             <ProfessorItem key={professor.id}>
               <ProfessorImage 
-                src={professor.image_url || '/default-professor.png'} 
+                src={professor.profile_image || professor.image_url || defaultProfessorImage} 
                 alt={professor.name}
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = defaultProfessorImage;
+                }}
               />
               <ProfessorName>{professor.name}</ProfessorName>
               <ProfessorDesignation>{professor.title}</ProfessorDesignation>
@@ -129,64 +218,155 @@ const CryptoIIITD = () => {
       </ContentSection>
 
       <ContentSection>
-        <SectionTitle>Projects</SectionTitle>
-        <ProjectSelector>
-          <SelectWrapper>
-            <select onChange={handleProjectSelect} defaultValue="">
-              <option value="" disabled>Select a Project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.title}
-                </option>
-              ))}
-            </select>
-          </SelectWrapper>
-
-          {selectedProject && (
-            <ProjectDetails>
-              <ProjectHeader>
-                <ProjectTitle>{selectedProject.title}</ProjectTitle>
-                <ProjectType>{selectedProject.type}</ProjectType>
-              </ProjectHeader>
-
-              <ProjectTimeframe>
-                {new Date(selectedProject.startDate).toLocaleDateString()} - {new Date(selectedProject.endDate).toLocaleDateString()}
-                <ProjectStatus>
-                  ({getProjectStatus(selectedProject.startDate, selectedProject.endDate)})
-                </ProjectStatus>
-              </ProjectTimeframe>
-
-              <ProjectDescription>{selectedProject.description}</ProjectDescription>
-
-              <ProjectTeam>
-                <TeamSection>
-                  <TeamTitle>Project Members:</TeamTitle>
-                  <MembersList>
-                    {selectedProject.members.map((member, index) => (
-                      <MemberItem key={index}>{member}</MemberItem>
-                    ))}
-                  </MembersList>
-                </TeamSection>
-
-                <TeamSection>
-                  <TeamTitle>Project Guide:</TeamTitle>
-                  <MemberItem>{selectedProject.professor}</MemberItem>
-                </TeamSection>
-              </ProjectTeam>
-
-              {selectedProject.technologies && (
-                <TechStack>
-                  <TeamTitle>Technologies:</TeamTitle>
-                  <TechList>
-                    {selectedProject.technologies.map((tech, index) => (
-                      <TechItem key={index}>{tech}</TechItem>
-                    ))}
-                  </TechList>
-                </TechStack>
-              )}
-            </ProjectDetails>
-          )}
-        </ProjectSelector>
+        <SectionTitle>Research Projects</SectionTitle>
+        
+        <FilterContainer>
+          <FilterGroup>
+            <FilterLabel>Category:</FilterLabel>
+            <FilterSelect value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+              <option value="all">All Categories</option>
+              <option value="IP">Independent Project</option>
+              <option value="IS">Independent Study</option>
+              <option value="BTP">B.Tech Project</option>
+              <option value="Capstone">Capstone Project</option>
+              <option value="Thesis">M.Tech Thesis</option>
+              <option value="Research">Research</option>
+            </FilterSelect>
+          </FilterGroup>
+          
+          <FilterGroup>
+            <FilterLabel>Status:</FilterLabel>
+            <FilterSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">All Statuses</option>
+              <option value="planning">Planning</option>
+              <option value="active">Active</option>
+              <option value="completed">Completed</option>
+              <option value="archived">Archived</option>
+            </FilterSelect>
+          </FilterGroup>
+        </FilterContainer>
+        
+        {loading ? (
+          <LoadingMessage>Loading projects...</LoadingMessage>
+        ) : filteredProjects.length === 0 ? (
+          <EmptyMessage>No projects match the selected filters.</EmptyMessage>
+        ) : (
+          <ProjectsContainer>
+            {filteredProjects.map((project) => {
+              // Debug logging
+              console.log("Processing project:", project);
+              
+              // Handle different field names that might contain technologies
+              const technologies = parseJsonField(project.tags || project.technologies);
+              console.log("Technologies:", technologies);
+              
+              // Handle different field names that might contain members
+              const members = parseJsonField(project.team_members || project.members);
+              console.log("Members:", members);
+              
+              // Find the guide in the team members
+              let guideName = "Unknown";
+              const guideEntry = members.find(member => 
+                (typeof member === 'object' && member.role === 'Guide') || 
+                (typeof member === 'string' && member.includes('Guide:'))
+              );
+              
+              if (guideEntry) {
+                guideName = typeof guideEntry === 'object' ? guideEntry.name : guideEntry.replace('Guide:', '').trim();
+              } else {
+                // Fallback to professor lookup if no guide found in team members
+                const professorId = project.professor_id;
+                if (professorId) {
+                  const professor = findProfessorById(professorId);
+                  guideName = professor.name;
+                }
+              }
+              
+              // Filter out the guide from the displayed team members
+              const teamMembers = members.filter(member => 
+                !(typeof member === 'object' && member.role === 'Guide') && 
+                !(typeof member === 'string' && member.includes('Guide:'))
+              );
+              
+              const status = project.status || getProjectStatus(project.start_date, project.end_date);
+              
+              return (
+                <ProjectCard key={project.id}>
+                  <ProjectHeader>
+                    <ProjectTitle>{project.title}</ProjectTitle>
+                    <ProjectType>
+                      {project.category === 'IP' && 'Independent Project'}
+                      {project.category === 'IS' && 'Independent Study'}
+                      {project.category === 'BTP' && 'B.Tech Project'}
+                      {project.category === 'Capstone' && 'Capstone Project'}
+                      {project.category === 'Thesis' && 'M.Tech Thesis'}
+                      {!(project.category === 'IP' || project.category === 'IS' || project.category === 'BTP' || project.category === 'Capstone' || project.category === 'Thesis') && 'Research'}
+                    </ProjectType>
+                  </ProjectHeader>
+                  
+                  <ProjectTimeframe>
+                    {project.start_date && (
+                      <>
+                        {new Date(project.start_date).toLocaleDateString()} 
+                        {project.end_date && ` - ${new Date(project.end_date).toLocaleDateString()}`}
+                      </>
+                    )}
+                    <ProjectStatus $status={project.status}>
+                      {project.status === 'planning' && 'Planning'}
+                      {project.status === 'active' && 'Active'}
+                      {project.status === 'completed' && 'Completed'}
+                      {project.status === 'archived' && 'Archived'}
+                      {!project.status && 'Active'}
+                    </ProjectStatus>
+                  </ProjectTimeframe>
+                  
+                  <ProjectDescription>
+                    {project.description}
+                  </ProjectDescription>
+                  
+                  <ProjectTeam>
+                    <TeamSection>
+                      <TeamTitle>Guide</TeamTitle>
+                      <MembersList>
+                        <MemberItem>{guideName}</MemberItem>
+                      </MembersList>
+                    </TeamSection>
+                    
+                    {teamMembers && teamMembers.length > 0 && (
+                      <TeamSection>
+                        <TeamTitle>Team Members</TeamTitle>
+                        <MembersList>
+                          {teamMembers.map((member, index) => (
+                            <MemberItem key={index}>{typeof member === 'object' ? member.name || 'Unknown' : member}</MemberItem>
+                          ))}
+                        </MembersList>
+                      </TeamSection>
+                    )}
+                  </ProjectTeam>
+                  
+                  {technologies && technologies.length > 0 && (
+                    <TechStack>
+                      <TeamTitle>Technologies</TeamTitle>
+                      <TechList>
+                        {technologies.map((tech, index) => (
+                          <TechItem key={index}>{typeof tech === 'object' ? tech.name || 'Unknown' : tech}</TechItem>
+                        ))}
+                      </TechList>
+                    </TechStack>
+                  )}
+                  
+                  {project.publication_url && (
+                    <PublicationLink>
+                      <a href={project.publication_url} target="_blank" rel="noopener noreferrer">
+                        View Publication
+                      </a>
+                    </PublicationLink>
+                  )}
+                </ProjectCard>
+              );
+            })}
+          </ProjectsContainer>
+        )}
       </ContentSection>
     </PageContainer>
   );
@@ -203,15 +383,14 @@ const Header = styled.header`
   margin-bottom: 3rem;
   padding: 2rem;
   background: ${({ theme }) => theme.colors.background};
-  border-radius: 10px;
-  box-shadow: ${({ theme }) => theme.shadows.medium};
-
+  border-radius: 8px;
+  
   h1 {
     font-size: 2.5rem;
     color: ${({ theme }) => theme.colors.primary};
     margin-bottom: 1rem;
   }
-
+  
   p {
     font-size: 1.2rem;
     color: ${({ theme }) => theme.colors.textLight};
@@ -219,17 +398,24 @@ const Header = styled.header`
 `;
 
 const ContentSection = styled.section`
-  margin-bottom: 3rem;
-  padding: 2rem;
-  background: white;
-  border-radius: 10px;
-  box-shadow: ${({ theme }) => theme.shadows.small};
+  margin-bottom: 4rem;
 `;
 
 const SectionTitle = styled.h2`
   font-size: 2rem;
   color: ${({ theme }) => theme.colors.primary};
   margin-bottom: 1.5rem;
+  position: relative;
+  
+  &:after {
+    content: '';
+    position: absolute;
+    bottom: -10px;
+    left: 0;
+    width: 60px;
+    height: 4px;
+    background: ${({ theme }) => theme.colors.secondary};
+  }
 `;
 
 const Description = styled.p`
@@ -257,11 +443,11 @@ const FocusArea = styled.div`
     margin-bottom: 1rem;
     font-size: 1.3rem;
   }
-
+  
   ul {
     list-style-type: none;
-    padding: 0;
-
+    padding-left: 1em;
+    
     li {
       margin-bottom: 0.8rem;
       color: ${({ theme }) => theme.colors.text};
@@ -334,34 +520,77 @@ const ProfessorContact = styled.div`
   }
 `;
 
-const ProjectSelector = styled.div`
-  margin-top: 2rem;
+const LoadingMessage = styled.div`
+  text-align: center;
+  padding: 2rem;
+  font-size: 1.2rem;
+  color: ${({ theme }) => theme.colors.textLight};
 `;
 
-const SelectWrapper = styled.div`
+const EmptyMessage = styled.p`
+  text-align: center;
+  font-size: 1.1rem;
+  color: ${({ theme }) => theme.colors.textLight};
+  padding: 2rem;
+  background: ${({ theme }) => theme.colors.backgroundLight};
+  border-radius: 8px;
+  margin-top: 1rem;
+`;
+
+const FilterContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
   margin-bottom: 2rem;
+  background: ${({ theme }) => theme.colors.backgroundLight};
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: ${({ theme }) => theme.shadows.small};
+`;
+
+const FilterGroup = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+`;
+
+const FilterLabel = styled.label`
+  font-weight: 600;
+  color: ${({ theme }) => theme.colors.text};
+`;
+
+const FilterSelect = styled.select`
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  background-color: white;
+  font-size: 0.9rem;
+  min-width: 180px;
   
-  select {
-    width: 100%;
-    padding: 0.8rem;
-    border-radius: 6px;
-    border: 1px solid ${({ theme }) => theme.colors.border};
-    font-size: 1rem;
-    background: white;
-    color: ${({ theme }) => theme.colors.text};
-    
-    &:focus {
-      outline: none;
-      border-color: ${({ theme }) => theme.colors.primary};
-    }
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.primary};
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
   }
 `;
 
-const ProjectDetails = styled.div`
+const ProjectsContainer = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 2rem;
+  margin-top: 1rem;
+`;
+
+const ProjectCard = styled.div`
   background: ${({ theme }) => theme.colors.backgroundLight};
   padding: 2rem;
-  border-radius: 8px;
-  box-shadow: ${({ theme }) => theme.shadows.small};
+  border-radius: 12px;
+  box-shadow: ${({ theme }) => theme.shadows.medium};
+  transition: transform 0.2s;
+  
+  &:hover {
+    transform: translateY(-5px);
+  }
 `;
 
 const ProjectHeader = styled.div`
@@ -374,7 +603,7 @@ const ProjectHeader = styled.div`
 const ProjectTitle = styled.h3`
   color: ${({ theme }) => theme.colors.primary};
   font-size: 1.4rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
   flex: 1;
 `;
 
@@ -390,11 +619,24 @@ const ProjectTimeframe = styled.div`
   color: ${({ theme }) => theme.colors.textLight};
   font-size: 1rem;
   margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 `;
 
 const ProjectStatus = styled.span`
   margin-left: 0.5rem;
   font-weight: 500;
+  background: ${({ $status, theme }) => 
+    $status === 'completed' ? theme.colors.success : 
+    $status === 'active' ? theme.colors.warning : 
+    $status === 'planning' ? theme.colors.info : 
+    $status === 'archived' ? theme.colors.error : 
+    theme.colors.warning};
+  color: white;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
 `;
 
 const ProjectDescription = styled.p`
@@ -433,10 +675,7 @@ const MemberItem = styled.span`
 `;
 
 const TechStack = styled.div`
-  h4 {
-    color: ${({ theme }) => theme.colors.primary};
-    margin-bottom: 0.8rem;
-  }
+  margin-bottom: 1.5rem;
 `;
 
 const TechList = styled.div`
@@ -451,6 +690,21 @@ const TechItem = styled.span`
   padding: 0.4rem 0.8rem;
   border-radius: 20px;
   font-size: 0.9rem;
+`;
+
+const PublicationLink = styled.div`
+  margin-top: 1.5rem;
+  
+  a {
+    display: inline-block;
+    color: ${({ theme }) => theme.colors.primary};
+    text-decoration: none;
+    font-weight: 500;
+    
+    &:hover {
+      text-decoration: underline;
+    }
+  }
 `;
 
 export default CryptoIIITD;

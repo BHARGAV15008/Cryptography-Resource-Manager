@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
 import axios from 'axios';
 import { FaPlus, FaSearch, FaFilter, FaVideo, FaFileAlt, FaBook, FaQuoteLeft, FaExternalLinkAlt, FaDownload, FaCopy, FaSync } from 'react-icons/fa';
@@ -11,8 +11,7 @@ const Resources = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
-    type: 'all',
-    tag: 'all'
+    type: 'all'
   });
   const [availableTags, setAvailableTags] = useState([]);
   const [showFilters, setShowFilters] = useState(false);
@@ -21,6 +20,27 @@ const Resources = () => {
   
   const { user } = useAuth();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  // Initialize filters from URL query parameters and update URL when filters change
+  useEffect(() => {
+    const typeParam = searchParams.get('type');
+    if (typeParam) {
+      setFilters(prev => ({ ...prev, type: typeParam }));
+    }
+  }, [searchParams]);
+  
+  // Update URL when filters change through the UI
+  const updateUrlWithFilters = (newFilters) => {
+    const params = {};
+    if (newFilters.type && newFilters.type !== 'all') {
+      params.type = newFilters.type;
+    }
+    setSearchParams(params, { replace: true });
+  };
+  
+  // Forward declaration of fetchResources which will be defined below
+  // This ensures it's in scope for the useEffect hook
 
   // Get auth header for API requests
   const getAuthHeader = () => {
@@ -32,6 +52,47 @@ const Resources = () => {
     };
   };
   
+  // Function to load mock data when server is unavailable
+  const loadMockData = () => {
+    console.log('Loading mock resource data');
+    // Mock resource data
+    const mockResources = [
+      {
+        id: 1,
+        title: 'Introduction to Cryptography',
+        description: 'A comprehensive introduction to cryptographic concepts',
+        type: 'article',
+        url: 'https://example.com/intro-crypto',
+        tags: ['basics', 'encryption'],
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 2,
+        title: 'Advanced Encryption Standards',
+        description: 'Deep dive into AES encryption',
+        type: 'video',
+        url: 'https://example.com/aes-video',
+        tags: ['encryption', 'advanced'],
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: 3,
+        title: 'Public Key Infrastructure',
+        description: 'Understanding PKI and its applications',
+        type: 'document',
+        url: 'https://example.com/pki-doc',
+        tags: ['security', 'certificates'],
+        createdAt: new Date().toISOString()
+      }
+    ];
+    
+    setResources(mockResources);
+    // Extract unique tags from mock resources
+    const tags = [...new Set(mockResources.flatMap(resource => resource.tags))];
+    setAvailableTags(tags);
+    setLoading(false);
+  };
+
   useEffect(() => {
     // Check server status first
     const checkServerStatus = async () => {
@@ -42,11 +103,11 @@ const Resources = () => {
           fetchResources();
         } else {
           console.log('Server reported issues, using local mock data');
-          useLocalMockData();
+          loadMockData();
         }
       } catch (error) {
         console.log('Server health check failed, using local mock data', error);
-        useLocalMockData();
+        loadMockData();
       }
     };
     
@@ -64,7 +125,7 @@ const Resources = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [location.key]); // Re-fetch when location changes (user navigates back to page)
+  }, [location.key, searchParams]); // Add searchParams to the dependency array to react to URL changes
 
   const useLocalMockData = () => {
     console.log('Using local mock data directly from the client');
@@ -126,16 +187,30 @@ const Resources = () => {
     setAvailableTags(Array.from(tags));
   };
 
-  const fetchResources = async () => {
+  const fetchResources = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       setRefreshing(true);
       
       try {
+        // Check if we have a type filter from URL parameters
+        const typeParam = searchParams.get('type');
+        // If we have a type parameter, update the filter state
+        if (typeParam && typeParam !== 'all') {
+          setFilters(prev => ({ ...prev, type: typeParam }));
+        }
+        
         // Use the same API endpoint as dashboard with auth header
         const response = await axios.get('/api/resources', getAuthHeader());
-        setResources(response.data);
+        let filteredData = response.data;
+        
+        // Apply type filter from URL if present
+        if (typeParam && typeParam !== 'all') {
+          filteredData = response.data.filter(resource => resource.type === typeParam);
+        }
+        
+        setResources(filteredData);
         
         // Extract unique tags from resources
         const tags = new Set();
@@ -146,8 +221,8 @@ const Resources = () => {
         });
         
         setAvailableTags(Array.from(tags));
-      } catch (apiError) {
-        console.error('API call failed, trying mock endpoint:', apiError);
+      } catch (err) {
+        console.error('API call failed, trying mock endpoint:', err);
         
         try {
           // Try the mock endpoint
@@ -237,7 +312,7 @@ const Resources = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [getAuthHeader]);
   
   const handleRefresh = () => {
     fetchResources();
@@ -249,10 +324,14 @@ const Resources = () => {
   
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
-    setFilters({
+    const newFilters = {
       ...filters,
       [name]: value
-    });
+    };
+    setFilters(newFilters);
+    
+    // Update URL with new filters
+    updateUrlWithFilters(newFilters);
   };
   
   const toggleFilters = () => {
@@ -322,11 +401,7 @@ const Resources = () => {
     // Type filter
     const matchesType = filters.type === 'all' || resource.type === filters.type;
     
-    // Tag filter
-    const matchesTag = filters.tag === 'all' || 
-      (resource.tags && resource.tags.includes(filters.tag));
-    
-    return matchesSearch && matchesType && matchesTag;
+    return matchesSearch && matchesType;
   });
   
   return (
@@ -396,20 +471,6 @@ const Resources = () => {
                 <option value="article">Articles</option>
               </FilterSelect>
             </FilterGroup>
-            
-            <FilterGroup>
-              <FilterLabel>Tag</FilterLabel>
-              <FilterSelect 
-                name="tag" 
-                value={filters.tag} 
-                onChange={handleFilterChange}
-              >
-                <option value="all">All Tags</option>
-                {availableTags.map(tag => (
-                  <option key={tag} value={tag}>{tag}</option>
-                ))}
-              </FilterSelect>
-            </FilterGroup>
           </FiltersContainer>
         )}
         
@@ -421,7 +482,7 @@ const Resources = () => {
           <EmptyState>
             <EmptyTitle>No resources found</EmptyTitle>
             <EmptyDescription>
-              {searchTerm || filters.type !== 'all' || filters.tag !== 'all'
+              {searchTerm || filters.type !== 'all'
                 ? 'Try adjusting your search or filters.'
                 : 'No resources have been added yet.'}
             </EmptyDescription>

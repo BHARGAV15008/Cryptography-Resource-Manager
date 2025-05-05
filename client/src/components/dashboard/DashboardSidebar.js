@@ -110,8 +110,7 @@ const DashboardSidebar = ({ isOpen }) => {
           <MenuItem 
             key={index}
             to={item.path}
-            isActive={location.pathname === item.path}
-            isOpen={isOpen}
+            data-active={location.pathname === item.path ? 'true' : 'false'}
           >
             <MenuIcon>{item.icon}</MenuIcon>
             {isOpen && <MenuText>{item.title}</MenuText>}
@@ -162,8 +161,8 @@ const MenuItem = styled(Link)`
   display: flex;
   align-items: center;
   padding: 0.75rem 1rem;
-  color: ${({ isActive }) => (isActive ? 'white' : 'rgba(255, 255, 255, 0.7)')};
-  background-color: ${({ isActive }) => (isActive ? 'rgba(255, 255, 255, 0.1)' : 'transparent')};
+  color: ${props => (props['data-active'] === 'true' ? 'white' : 'rgba(255, 255, 255, 0.7)')};
+  background-color: ${props => (props['data-active'] === 'true' ? 'rgba(255, 255, 255, 0.1)' : 'transparent')};
   border-radius: 8px;
   text-decoration: none;
   transition: all 0.2s;

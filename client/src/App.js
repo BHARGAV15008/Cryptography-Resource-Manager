@@ -27,7 +27,7 @@ import Lectures from './components/dashboard/Lectures';
 import ContentManagement from './components/dashboard/ContentManagement';
 import DashboardEvents from './components/dashboard/DashboardEvents';
 import DashboardHome from './components/dashboard/DashboardHome';
-import Professors from './components/dashboard/crypto-iiitd';
+import DashboardCryptoIIITD from './components/dashboard/DashboardCryptoIIITD';
 import Events from './pages/Events';
 import LecturesPage from './pages/Lectures';
 import CryptoIIITD from './pages/CryptoIIITD';
@@ -48,7 +48,7 @@ function App() {
               <Route path="content" element={<ContentManagement />} />
               <Route path="resources" element={<Dashboard />} />
               <Route path="events" element={<DashboardEvents />} />
-              <Route path="crypto-iiitd" element={<Professors />} />
+              <Route path="crypto-iiitd" element={<DashboardCryptoIIITD />} />
               <Route path="settings" element={<Profile />} />
               {/* <Route path="crypto-iiitd" element={<CryptoIIITD />} /> */}
             </Route>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import axios from 'axios';
@@ -27,24 +27,8 @@ const ResourceDetail = () => {
     };
   };
   
-  useEffect(() => {
-    fetchResource();
-    
-    // Add visibility change listener to refresh data when user returns to the page
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchResource();
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [id]);
-  
-  const fetchResource = async () => {
+  // Use useCallback to memoize the fetchResource function
+  const fetchResource = useCallback(async () => {
     try {
       if (loading) {
         setLoading(true);
@@ -123,11 +107,55 @@ const ResourceDetail = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [id, user, loading]);
+
+  useEffect(() => {
+    fetchResource();
+    
+    // Add visibility change listener to refresh data when user returns to the page
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchResource();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchResource]);
   
   const handleRefresh = () => {
     fetchResource();
   };
+
+  const fetchRelatedResources = useCallback(async () => {
+    if (!resource) return;
+    
+    try {
+      // Get resources from the main endpoint with type filter through query parameter
+      if (resource.type) {
+        const response = await axios.get(`/api/resources?type=${resource.type}`, getAuthHeader());
+        // Filter out the current resource
+        const filteredResources = response.data
+          .filter(r => r.id !== parseInt(id))
+          .slice(0, 3);
+        setRelatedResources(filteredResources);
+      } else {
+        // If resource has no type, just get the latest resources
+        const response = await axios.get('/api/resources', getAuthHeader());
+        const filteredResources = response.data
+          .filter(r => r.id !== parseInt(id))
+          .slice(0, 3);
+        setRelatedResources(filteredResources);
+      }
+    } catch (err) {
+      console.error('API call failed:', err);
+      // Use mock data if API fails
+      useLocalMockData();
+    }
+  }, [resource, id, getAuthHeader]);
 
   const handleBookmark = async () => {
     if (!user) return;
@@ -151,7 +179,7 @@ const ResourceDetail = () => {
     if (resource.url) {
       const link = document.createElement('a');
       link.href = resource.url;
-      link.download = `${resource.title}.${resource.type}`;
+      link.download = `${resource.title}${resource.type ? '.' + resource.type : ''}`;
       link.target = '_blank';
       link.click();
     }
@@ -181,6 +209,9 @@ const ResourceDetail = () => {
   };
   
   const getTypeIcon = (type) => {
+    // If type is undefined or null, use default icon
+    if (!type) return <FaFileAlt />;
+    
     switch (type) {
       case 'video':
         return <FaVideo />;
@@ -257,7 +288,7 @@ const ResourceDetail = () => {
         <ResourceHeader>
           <ResourceType>
             {getTypeIcon(resource.type)}
-            <span>{resource.type.charAt(0).toUpperCase() + resource.type.slice(1)}</span>
+            <span>{resource.type ? resource.type.charAt(0).toUpperCase() + resource.type.slice(1) : 'Unknown'}</span>
           </ResourceType>
           <ResourceTitle>{resource.title}</ResourceTitle>
           <ResourceMeta>
@@ -313,7 +344,7 @@ const ResourceDetail = () => {
           </ActionButton>
           
           {user && (
-            <BookmarkButton onClick={handleBookmark} isBookmarked={isBookmarked}>
+            <BookmarkButton onClick={handleBookmark} $isBookmarked={isBookmarked}>
               {isBookmarked ? <FaBookmark /> : <FaRegBookmark />}
               {isBookmarked ? 'Bookmarked' : 'Bookmark'}
             </BookmarkButton>
@@ -493,20 +524,20 @@ const BookmarkButton = styled.button`
   justify-content: center;
   gap: 0.5rem;
   padding: 0.8rem 1.5rem;
-  background-color: ${({ isBookmarked, theme }) => 
-    isBookmarked ? `${theme.colors.success}20` : 'transparent'};
-  color: ${({ isBookmarked, theme }) => 
-    isBookmarked ? theme.colors.success : theme.colors.primary};
-  border: 2px solid ${({ isBookmarked, theme }) => 
-    isBookmarked ? theme.colors.success : theme.colors.primary};
+  background-color: ${({ $isBookmarked, theme }) => 
+    $isBookmarked ? `${theme.colors.success}20` : 'transparent'};
+  color: ${({ $isBookmarked, theme }) => 
+    $isBookmarked ? theme.colors.success : theme.colors.primary};
+  border: 2px solid ${({ $isBookmarked, theme }) => 
+    $isBookmarked ? theme.colors.success : theme.colors.primary};
   border-radius: 5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
   
   &:hover {
-    background-color: ${({ isBookmarked, theme }) => 
-      isBookmarked ? `${theme.colors.success}30` : `${theme.colors.primary}10`};
+    background-color: ${({ $isBookmarked, theme }) => 
+      $isBookmarked ? `${theme.colors.success}30` : `${theme.colors.primary}10`};
     transform: translateY(-3px);
   }
 `;

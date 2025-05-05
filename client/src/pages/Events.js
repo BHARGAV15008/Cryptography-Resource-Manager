@@ -28,20 +28,18 @@ const Events = () => {
         setLoading(true);
         setError(null);
         
-        // Check if server is available first
         try {
-          const healthCheck = await axios.get('/api/health');
+          // Direct API call to our server
+          const API_BASE_URL = 'http://localhost:5001';
+          console.log('Fetching events from API');
+          const response = await axios.get(`${API_BASE_URL}/api/events`);
           
-          if (healthCheck.data.status === 'ok') {
-            console.log('Server is available, fetching events');
-            const response = await axios.get('/api/events');
-            setEvents(response.data);
-          } else {
-            console.log('Server reported issues, using mock data');
-            loadMockData();
-          }
+          // Check if the response has a value property (from our API)
+          const eventsData = response.data.value || response.data;
+          console.log('Fetched events:', eventsData);
+          setEvents(eventsData);
         } catch (serverError) {
-          console.error('Server health check failed, using mock data:', serverError);
+          console.error('Server error, using mock data:', serverError);
           loadMockData();
         }
       } catch (err) {
@@ -103,14 +101,21 @@ const Events = () => {
     const completed = [];
 
     events.forEach(event => {
-      const eventDate = new Date(event.date);
-      const [startTime, endTime] = (event.time || '').split('-');
-      const eventStartTime = startTime ? new Date(`${event.date} ${startTime}`) : eventDate;
-      const eventEndTime = endTime ? new Date(`${event.date} ${endTime}`) : eventDate;
+      // Handle our API's date format (startDate and endDate instead of date)
+      const startDate = event.startDate || event.date;
+      const endDate = event.endDate;
+      
+      if (!startDate) {
+        // Skip events without dates
+        return;
+      }
+      
+      const eventStartDate = new Date(startDate);
+      const eventEndDate = endDate ? new Date(endDate) : new Date(eventStartDate.getTime() + 24 * 60 * 60 * 1000);
 
-      if (now >= eventStartTime && now <= eventEndTime) {
+      if (now >= eventStartDate && now <= eventEndDate) {
         ongoing.push(event);
-      } else if (now < eventStartTime) {
+      } else if (now < eventStartDate) {
         upcoming.push(event);
       } else {
         completed.push(event);
@@ -124,22 +129,47 @@ const Events = () => {
     <SectionContainer>
       <SectionTitle>{title}</SectionTitle>
       <EventsGrid>
-        {events.map(event => (
-          <EventCard key={event._id}>
-            <EventImage src={event.thumbnail || 'https://via.placeholder.com/300x200?text=Event'} alt={event.title} />
-            <EventContent>
-              <EventTitle>{event.title}</EventTitle>
-              <EventInfo>
-                <p><strong>Date:</strong> {formatDate(event.date)}</p>
-                <p><strong>Time:</strong> {event.time || 'Not specified'}</p>
-                <p><strong>Location:</strong> {event.location || 'Not specified'}</p>
-                <p><strong>Organizer:</strong> {event.organizerName || 'Not specified'}</p>
-                <p><strong>Event Type:</strong> {event.eventType || 'Not specified'}</p>
-              </EventInfo>
-              <EventDescription>{event.description || 'No description available'}</EventDescription>
-            </EventContent>
-          </EventCard>
-        ))}
+        {events.map(event => {
+          // Use id or _id as the key, ensuring each event has a unique key
+          const eventKey = event.id || event._id || Math.random().toString(36).substr(2, 9);
+          
+          // Handle image URL - use a placeholder if the URL is invalid or missing
+          const imageUrl = event.imageUrl || event.thumbnail;
+          const isValidUrl = imageUrl && (
+            imageUrl.startsWith('http') || 
+            imageUrl.startsWith('/uploads/') ||
+            imageUrl.startsWith('/images/')
+          );
+          
+          // Use a placeholder if the URL is invalid
+          const displayImageUrl = isValidUrl ? 
+            imageUrl : 
+            `https://via.placeholder.com/300x200?text=${encodeURIComponent(event.eventType || 'Event')}`;
+          
+          return (
+            <EventCard key={eventKey}>
+              <EventImage 
+                src={displayImageUrl} 
+                alt={event.title}
+                onError={(e) => {
+                  // If image fails to load, replace with placeholder
+                  e.target.src = `https://via.placeholder.com/300x200?text=${encodeURIComponent(event.eventType || 'Event')}`;
+                }}
+              />
+              <EventContent>
+                <EventTitle>{event.title}</EventTitle>
+                <EventInfo>
+                  <p><strong>Date:</strong> {formatDate(event.startDate || event.date)}</p>
+                  {event.endDate && <p><strong>End Date:</strong> {formatDate(event.endDate)}</p>}
+                  <p><strong>Location:</strong> {event.location || 'Not specified'}</p>
+                  <p><strong>Organizer:</strong> {event.organizerName || 'Not specified'}</p>
+                  <p><strong>Event Type:</strong> {event.eventType || 'Not specified'}</p>
+                </EventInfo>
+                <EventDescription>{event.description || 'No description available'}</EventDescription>
+              </EventContent>
+            </EventCard>
+          );
+        })}
       </EventsGrid>
     </SectionContainer>
   );
